@@ -17,18 +17,18 @@
 #ifndef THMLOSIS_H
 #define THMLOSIS_H
 
-#include <swbasicfilter.h>
-
 #include <defs.h>
+#include <swfilter.h>
 
 /** this filter converts ThML text to HTML text with hrefs
  */
-class SWDLLEXPORT ThMLOSIS : public SWBasicFilter {
+class SWDLLEXPORT ThMLOSIS : public SWFilter {
 protected:
-	virtual bool handleToken(char **buf, const char *token, DualStringMap &userData);
-	virtual const char *convertToOSIS(const char *);
+	virtual const char *convertToOSIS(const char *, const SWKey *key);
+	void pushString(char **buf, const char *format, ...);
 public:
 	ThMLOSIS();
+	virtual ~ThMLOSIS();
 	char ProcessText(char *text, int maxlen, const SWKey *, const SWModule * = 0);
 };
 
