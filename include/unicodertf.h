@@ -1,6 +1,6 @@
 /*
  *
- * $Id: unicodertf.h,v 1.1 2001/05/22 09:22:51 scribe Exp $
+ * $Id: unicodertf.h,v 1.2 2001/06/15 01:07:46 chrislit Exp $
  *
  * Copyright 1998 CrossWire Bible Society (http://www.crosswire.org)
  *	CrossWire Bible Society
@@ -25,7 +25,7 @@
 
 #include <defs.h>
 
-  /** This filter converts GBF text into plain text
+  /** This filter converts UTF-8 text into RTF Unicode tags
   */
 class SWDLLEXPORT UnicodeRTF:public SWFilter {
 public:
