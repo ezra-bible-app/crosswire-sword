@@ -67,7 +67,6 @@ char GBFStrongs::ProcessText(char *text, int maxlen, const SWKey *key)
 				intoken = false;
 				if (*token == 'W') {	// Strongs
 					switch(token[1]) {
-					case 'T':               // Tense
 					case 'G':               // Greek
 					case 'H':               // Hebrew
 						if ((from[1] == ' ') || (from[1] == ',') || (from[1] == ';') || (from[1] == '.') || (from[1] == '?') || (from[1] == '!') || (from[1] == ')') || (from[1] == '\'') || (from[1] == '\"')) {
