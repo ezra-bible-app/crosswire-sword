@@ -1,6 +1,6 @@
 
 root := ../../..
-subdirs := rawld rawld4
+subdirs := rawld rawld4 zld
 pre-targets := 
 targets := ${root}/lib/libsword.a
 clean-targets := none
