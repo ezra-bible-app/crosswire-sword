@@ -20,9 +20,8 @@ main(int argc, char **argv)
 	SWCrypt *zobj;
 	VerseKey key;
 	RawVerse *rawdrv;
-	int ofd[2], oxfd[2];
-	long offset, loffset = 0, lzoffset = 0;
-	unsigned short size, lsize = 0, lzsize;
+	long offset;
+	unsigned short size;
 	unsigned int len;
 	char *tmpbuf;
 	

@@ -15,15 +15,9 @@
 #include <rawtext.h>
 
 
-main(int argc, char **argv)
-{
+main(int argc, char **argv) {
 	VerseKey key;
 	RawText *rawdrv;
-	int ofd[2], oxfd[2];
-	long offset, loffset = 0, lzoffset = 0;
-	unsigned short size, lsize = 0, lzsize;
-	unsigned int len;
-	char *tmpbuf;
 	
 	if (argc != 3) {
 		fprintf(stderr, "usage: %s <datapath> \"<key>\"\n", argv[0]);
