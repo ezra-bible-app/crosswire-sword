@@ -2,7 +2,7 @@
  *  swcacher.h	- definition of class SWCacher used to provide an interface for
  *  	objects that cache and want a standard interface for cleaning up.
  *
- * $Id: swcacher.h,v 1.4 2003/03/04 11:35:52 mgruner Exp $
+ * $Id: swcacher.h,v 1.5 2003/08/29 06:00:16 scribe Exp $
  *
  * Copyright 1998 CrossWire Bible Society (http://www.crosswire.org)
  *	CrossWire Bible Society
@@ -27,8 +27,9 @@
 
 SWORD_NAMESPACE_START
 
-/** A simple cache management class.
-*/
+/** used to provide an interface for objects that cache and want
+ *	a standard interface for cleaning up.
+ */
 class SWDLLEXPORT  SWCacher {
 public:
 	SWCacher();
