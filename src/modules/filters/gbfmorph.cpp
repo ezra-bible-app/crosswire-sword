@@ -17,7 +17,7 @@
 const char GBFMorph::on[] = "On";
 const char GBFMorph::off[] = "Off";
 const char GBFMorph::optName[] = "Morphological Tags";
-const char GBFMorph::optTip[] = "Toggles Morphological Tags On and Off In Bible Texts If They Exist";
+const char GBFMorph::optTip[] = "Toggles Morphological Tags On and Off if they exist";
 
 
 GBFMorph::GBFMorph() {
