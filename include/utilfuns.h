@@ -1,7 +1,7 @@
 /******************************************************************************
  *  utilfuns.h	- utility function prototypes
  *
- * $Id: utilfuns.h,v 1.1 1999/05/04 22:03:36 scribe Exp $
+ * $Id: utilfuns.h,v 1.2 2003/06/01 14:32:09 joachim Exp $
  *
  * Copyright 1998 CrossWire Bible Society (http://www.crosswire.org)
  *	CrossWire Bible Society
@@ -24,6 +24,6 @@
 
 #include <utilstr.h>
 #include <utilconf.h>
-
+#include <utilweb.h>
 
 #endif
