@@ -7,11 +7,14 @@ void percentUpdate(char percent, void *userData) {
 	static char printed = 0;
 	char maxHashes = *((char *)userData);
 	
-	while ((((float)percent)/100) * maxHashes > printed) {
+/*	while ((((float)percent)/100) * maxHashes > printed) {
 		cout << "=";
 		printed++;
 		cout.flush();
 	}
+*/
+	cout << (int)percent << "% ";
+	cout.flush();
 }
 
 
@@ -47,12 +50,12 @@ int main(int argc, char **argv)
 	}
 
 	cout << "[0=================================50===============================100]\n ";
-//	for (listkey = target->Search(argv[2]);!listkey.Error();listkey++)
 	char lineLen = 70;
-	listkey = target->Search(argv[2], -2, 0/*REG_ICASE*/, 0, 0, &percentUpdate, &lineLen);
+	listkey = target->Search(argv[2], -2, 0/*REG_ICASE*/, 0, 0, &percentUpdate/*, &lineLen*/);
 	cout << "\n";
-	while (!listkey.Error()) {
+/*	while (!listkey.Error()) {
 		cout << (const char *)listkey << "\n";
 		listkey++;
 	}
+*/
 }
