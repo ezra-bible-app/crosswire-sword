@@ -1,6 +1,6 @@
 //---------------------------------------------------------------------------
 
-#include <vcl.h>
+//#include <vcl.h>
 #pragma hdrstop
 USEUNIT("..\..\src\keys\versekey.cpp");
 USEUNIT("..\..\src\keys\strkey.cpp");
