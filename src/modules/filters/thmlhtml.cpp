@@ -139,10 +139,16 @@ bool ThMLHTML::handleToken(char **buf, const char *token) {
 	if (!substituteToken(buf, token)) {
 	// manually process if it wasn't a simple substitution
 		if (!strncmp(token, "sync type=\"Strongs\" value=\"", 27) && (token[27] == 'H' || token[27] == 'G' || token[27] == 'A')) {
-			pushString(buf, "<SMALL><EM>");
-			for (unsigned int i = 28; token[i] != '\"'; i++)
-				*(*buf)++ = token[i];
-			pushString(buf, "</EM></SMALL>");
+			pushString(buf, "<A HREF=\"");
+			for (unsigned int i = 5; i < strlen(token); i++)				
+				if(token[i] != '\"') 			
+					*(*buf)++ = token[i];
+			*(*buf)++ = '\"';
+			*(*buf)++ = '>';
+			for (unsigned int i = 28; i < strlen(token); i++)				
+				if(token[i] != '\"') 			
+					*(*buf)++ = token[i];		
+			pushString(buf, "</A>");
 		}
 
 		else if (!strncmp(token, "sync type=\"Morph\" value=\"", 25)) {
@@ -152,12 +158,15 @@ bool ThMLHTML::handleToken(char **buf, const char *token) {
 			pushString(buf, "</EM></SMALL>");
 		}
 
-		else if (!strncmp(token, "scripRef version", 16)) {
+		else if (!strncmp(token, "scripRef", 8)) {
 			pushString(buf, "<A HREF=\"");
-			for (unsigned int i = 32; token[i] != '\"'; i++)
-				*(*buf)++ = token[i];
+			for (unsigned int i = 9; i < strlen(token); i++)				
+				if(token[i] != '\"') 			
+					*(*buf)++ = token[i];
 			*(*buf)++ = '\"';
 			*(*buf)++ = '>';
+			/*for (unsigned int i = 9; token[i] != '\"'; i++)
+				*(*buf)++ = token[i];*/
 		} 
 
 		else if (!strncmp(token, "sync type=\"Strongs\" value=\"T", 28)) {
