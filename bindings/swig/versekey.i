@@ -1,77 +1,56 @@
 %{
 #include "versekey.h"
-#include "listkey.h"
-using namespace sword;
 %}
 
-class VerseKey : public SWKey {
-public:
-  VerseKey(const char *ikey = 0);
-  VerseKey(const SWKey * ikey);
-  VerseKey(const char *min, const char *max);
-  VerseKey(const VerseKey &k);
-  virtual ~VerseKey();
-
-  virtual SWKey *clone() const;
-
-//bound management
-//  VerseKey & LowerBound(const char *lb);
-//  VerseKey & UpperBound(const char *ub);
-  VerseKey & LowerBound() const;
-  VerseKey & UpperBound() const;
-  void ClearBounds();
-
-//data functions
-  virtual ListKey ParseVerseList (const char *buf, const char *defaultKey="Genesis 1:1", bool expandRange=false);
-
-  virtual void setText(const char *ikey);
-  virtual const char* getText () const;
-  virtual const char *getRangeText() const;
-  virtual const char *getShortText() const;
 
 
-  virtual char Traversable();
+%ignore sword::sbook::versemax;
+%ignore sword::VerseKey::setBookAbbrevs;
+%ignore sword::VerseKey::setBooks;
+%ignore sword::VerseKey::setLocale;
+		
 
-  virtual void decrement(int step);
-  virtual void increment(int step);
+%ignore sword::VerseKey::builtin_BMAX;
+%ignore sword::VerseKey::builtin_books;
+%ignore sword::VerseKey::builtin_abbrevs;
+%ignore sword::VerseKey::BMAX;
+%ignore sword::VerseKey::books;
+					
 
-  virtual const char *getBookName() const;
-  virtual const char *getBookAbbrev() const;
 
-  virtual char Testament() const;
-  virtual char Book() const;
-  virtual int Chapter() const;
-  virtual int Verse() const;
+%include "versekey.h"
 
-  //virtual char Testament(char itestament);
-//  virtual char Book(char ibook);
-//  virtual int Chapter(int ichapter);
-//  virtual int Verse(int iverse);
+%extend sword::sbook {
+	const int verseMax( int chapter ) {
+		if ( chapter > 0  && chapter < self->chapmax ) {
+			return self->versemax[chapter-1];
+		} else {
+			return 0;
+		}
+	}
+};
 
-  virtual void Normalize(char autocheck = 0);
-  virtual char AutoNormalize(char iautonorm = MAXPOS (char));
 
-  virtual char Headings(char iheadings = MAXPOS (char));
-  virtual const char *getOSISRef() const;
 
-  virtual int compare(const SWKey & ikey);
-  virtual int _compare(const VerseKey & ikey);
+%extend sword::VerseKey {
+	/* C++-style cast */
+	static sword::VerseKey *castTo(sword::SWKey *o) {
+		return dynamic_cast<sword::VerseKey*>(o);
+	}
 
-  virtual void setLocale(const char *name);
-  virtual const char *getLocale() const;
 
-// extensions to Sword's class
-
-%extend {
 	/* Get number of books in the given testament
 	* testament may be 1 (OT) or 2 (NT)
 	*/
+
+        
 	const int bookCount( const int testament ) {
 		if ( (testament < 1) || (testament > 2) ) {
 			return 0;
 		};
 		return self->BMAX[testament-1];
 	};
+
 
 	/* Get name of book
 	* Returns the name of the booknumber in the givn testament.
@@ -103,7 +82,6 @@ public:
 
 		return self->books[testament-1][book-1].chapmax;
 	};
-
 	/* Get number of verses in the given chapter of the given in the given testament,
 	* testament may be 1 (OT) or 2 (NT)
 	* book may be in the range 1 <= bookCount(testament)
@@ -123,6 +101,4 @@ public:
 		return self->books[testament-1][book-1].versemax[chapter-1];
 
 	};
-}
-
 };
