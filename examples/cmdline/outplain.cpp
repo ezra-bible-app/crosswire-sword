@@ -18,12 +18,13 @@
 #include <swmgr.h>
 #include <swmodule.h>
 #include <versekey.h>
+#include <markupfiltmgr.h>
 
 using namespace sword;
 using namespace std;
 
 int main(int argc, char **argv) {
-	SWMgr manager;		// create a default manager that looks in the current directory for mods.conf
+	SWMgr manager(new MarkupFilterMgr(sword::FMT_HTMLHREF, sword::ENC_UTF16));
 
 	const char *bookName = (argc > 1) ? argv[1] : "WLC";
 	SWModule *b = manager.getModule(bookName);
@@ -35,8 +36,9 @@ int main(int argc, char **argv) {
 	if (!book.getRawEntryBuf().size()) return -2; 	// empty module
 	for (;!book.Error(); book++) {
 		cout << "$$$";
-		if (vk) cout << vk->getOSISRef();
-		else	cout << book.getKeyText();
-		cout << "\n" << book.StripText() << "\n\n";
+//		if (vk) cout << vk->getOSISRef();
+//		else
+			cout << book.getKeyText();
+		cout << "\n" << book.RenderText() << "\n\n";
 	}
 }
