@@ -21,13 +21,13 @@
 #ifndef OSISWEBIF_H
 #define OSISWEBIF_H
 
-#include <osishtmlhref.h>
+#include <osisxhtml.h>
 
 SWORD_NAMESPACE_START
 
 /** this filter converts OSIS  text to HTML text with hrefs
  */
-class SWDLLEXPORT OSISWEBIF : public OSISHTMLHREF {
+class SWDLLEXPORT OSISWEBIF : public OSISXHTML {
 	const SWBuf baseURL;
 	const SWBuf passageStudyURL;
 	bool javascript;

@@ -36,60 +36,6 @@ SWORD_NAMESPACE_START
 
 namespace {
 	typedef std::stack<SWBuf> TagStack;
-}
-
-// TODO: this bridge pattern is to preserve binary compat on 1.6.x
-class OSISHTMLHREF::TagStacks {
-public:
-	TagStack quoteStack;
-	TagStack hiStack;
-};
-
-OSISHTMLHREF::MyUserData::MyUserData(const SWModule *module, const SWKey *key) : BasicFilterUserData(module, key) {
-	inXRefNote    = false;
-	suspendLevel = 0;
-	tagStacks = new TagStacks();
-	wordsOfChristStart = "<font color=\"red\"> ";
-	wordsOfChristEnd   = "</font> ";
-	if (module) {
-		osisQToTick = ((!module->getConfigEntry("OSISqToTick")) || (strcmp(module->getConfigEntry("OSISqToTick"), "false")));
-		version = module->Name();
-		BiblicalText = (!strcmp(module->Type(), "Biblical Texts"));
-	}
-	else {
-		osisQToTick = true;	// default
-		version = "";
-	}
-}
-
-OSISHTMLHREF::MyUserData::~MyUserData() {
-	delete tagStacks;
-}
-
-OSISHTMLHREF::OSISHTMLHREF() {
-	setTokenStart("<");
-	setTokenEnd(">");
-
-	setEscapeStart("&");
-	setEscapeEnd(";");
-
-	setEscapeStringCaseSensitive(true);
-	setPassThruNumericEscapeString(true);
-
-	addAllowedEscapeString("quot");
-	addAllowedEscapeString("apos");
-	addAllowedEscapeString("amp");
-	addAllowedEscapeString("lt");
-	addAllowedEscapeString("gt");
-
-	setTokenCaseSensitive(true);
-	
-	//	addTokenSubstitute("lg",  "<br />");
-	//	addTokenSubstitute("/lg", "<br />");
-
-	morphFirst = false;
-}
-
 // though this might be slightly slower, possibly causing an extra bool check, this is a renderFilter
 // so speed isn't the absolute highest priority, and this is a very minor possible hit
 static inline void outText(const char *t, SWBuf &o, BasicFilterUserData *u) { if (!u->suspendTextPassThru) o += t; else u->lastSuspendSegment += t; }
@@ -157,6 +103,60 @@ void processMorph(bool suspendTextPassThru, XMLTag &tag, SWBuf &buf) {
 		//}
 	}
 }
+}	// end anonymous namespace
+
+// TODO: this bridge pattern is to preserve binary compat on 1.6.x
+class OSISHTMLHREF::TagStacks {
+public:
+	TagStack quoteStack;
+	TagStack hiStack;
+};
+
+OSISHTMLHREF::MyUserData::MyUserData(const SWModule *module, const SWKey *key) : BasicFilterUserData(module, key) {
+	inXRefNote    = false;
+	suspendLevel = 0;
+	tagStacks = new TagStacks();
+	wordsOfChristStart = "<font color=\"red\"> ";
+	wordsOfChristEnd   = "</font> ";
+	if (module) {
+		osisQToTick = ((!module->getConfigEntry("OSISqToTick")) || (strcmp(module->getConfigEntry("OSISqToTick"), "false")));
+		version = module->Name();
+		BiblicalText = (!strcmp(module->Type(), "Biblical Texts"));
+	}
+	else {
+		osisQToTick = true;	// default
+		version = "";
+	}
+}
+
+OSISHTMLHREF::MyUserData::~MyUserData() {
+	delete tagStacks;
+}
+
+OSISHTMLHREF::OSISHTMLHREF() {
+	setTokenStart("<");
+	setTokenEnd(">");
+
+	setEscapeStart("&");
+	setEscapeEnd(";");
+
+	setEscapeStringCaseSensitive(true);
+	setPassThruNumericEscapeString(true);
+
+	addAllowedEscapeString("quot");
+	addAllowedEscapeString("apos");
+	addAllowedEscapeString("amp");
+	addAllowedEscapeString("lt");
+	addAllowedEscapeString("gt");
+
+	setTokenCaseSensitive(true);
+	
+	//	addTokenSubstitute("lg",  "<br />");
+	//	addTokenSubstitute("/lg", "<br />");
+
+	morphFirst = false;
+}
+
 
 bool OSISHTMLHREF::handleToken(SWBuf &buf, const char *token, BasicFilterUserData *userData) {
 	MyUserData *u = (MyUserData *)userData;
