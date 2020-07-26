@@ -1,12 +1,15 @@
-DEBUG(LINK): Acts.2.21
+DEBUG(LINK MASTER): Gen.1.6
+DEBUG(LINK MASTER): Acts.2.21
 SUCCESS: ../../utilities/osis2mod: has finished its work and will now rest
+INFO(LINK): Linking Gen.1.7 to Gen.1.6
+INFO(LINK): Linking Gen.1.8 to Gen.1.6
 INFO(LINK): Linking Acts.2.22 to Acts.2.21
 Key:
 Psalms 3:1
 -------
 Preverse Header 0:
 Raw:
-<div sID="gen12" type="section"/> <title canonical="true" type="psalm">A Psalm of David<note n="A" osisID="Ps.3.xref.A" swordFootnote="1" type="crossReference"></note>, when he fled from Absalom his son.</title> <div sID="gen13" type="x-p"/> <lg sID="gen14"/> 
+<div sID="gen16" type="section"/> <title canonical="true" type="psalm">A Psalm of David<note n="A" osisID="Ps.3.xref.A" swordFootnote="1" type="crossReference"></note>, when he fled from Absalom his son.</title> <div sID="gen17" type="x-p"/> <lg sID="gen18"/> 
 -------
 Rendered Header:
  <h3 class="title psalm canonical">A Psalm of David<a class="noteMarker crossReference" href="passagestudy.jsp?action=showNote&type=x&value=1&module=OSISReference&passage=Psalms+3%3A1"><small><sup class="x">*x</sup></small></a>, when he fled from Absalom his son.</h3>
@@ -97,7 +100,7 @@ Mark 1:14
 -------
 Preverse Header 0:
 Raw:
-<div sID="gen25" type="section"/> <title>The Beginning of the Ministry of Jesus</title> <title type="parallel">(<reference osisRef="Matt.4.12-Matt.4.22">Matt 4:12–22</reference>; <reference osisRef="Luke.4.14">Luke 4:14</reference>, <reference osisRef="Luke.4.15">15</reference>; <reference osisRef="Luke.5.1-Luke.5.11">5:1-11</reference>) </title> <div sID="gen26" type="x-p"/> 
+<div sID="gen29" type="section"/> <title>The Beginning of the Ministry of Jesus</title> <title type="parallel">(<reference osisRef="Matt.4.12-Matt.4.22">Matt 4:12–22</reference>; <reference osisRef="Luke.4.14">Luke 4:14</reference>, <reference osisRef="Luke.4.15">15</reference>; <reference osisRef="Luke.5.1-Luke.5.11">5:1-11</reference>) </title> <div sID="gen30" type="x-p"/> 
 -------
 Rendered Header:
  <h3 class="title">The Beginning of the Ministry of Jesus</h3>
@@ -187,12 +190,16 @@ Acts 2:20: ‘* The sun will be turned into darkness *
 * And the moon into blood *,
 * Before the great and glorious day of the Lord shall come *.
 
-Acts 2:21: And it shall come to pass, that whosoever shall call on the name of the Lord shall be saved. (22) Ye men of Israel, hear these words; Jesus of Nazareth, a man approved of God among you by miracles and wonders and signs, which God did by him in the midst of you, as ye yourselves also know:   
-Acts 2:22: And it shall come to pass, that whosoever shall call on the name of the Lord shall be saved. (22) Ye men of Israel, hear these words; Jesus of Nazareth, a man approved of God among you by miracles and wonders and signs, which God did by him in the midst of you, as ye yourselves also know:   
 
 -- RTF output
 {\rtf1\ansi{\fonttbl{\f0\froman\fcharset0\fprq2 Times New Roman;}{\f1\fdecor\fprq2 Gentium;}{\f7\froman\fcharset2\fprq2 Symbol;}}Acts 2:19: {\f1 ‘{\i1 {And I will grant} {wonders} {in the sky} {above}}{\par} {\i1 {And signs} {on the earth} {below}},{\par} {\i1 {Blood}, {and fire}, {and vapor} {of smoke}}.{\par}}\par 
 Acts 2:20: {\f1 ‘{\i1 {The sun} {will be turned} {into darkness}}{\par} {\i1 {And the moon} {into blood}},{\par} {\i1 {Before} {the great} {and glorious} {day} {of the Lord} {shall come}}.{\par}}\par 
-Acts 2:21: {\f1 {And} {it shall come to pass}, {\i1 that} {whosoever} {shall call on} {the name} {of the Lord} {shall be saved}. (22) {Ye men} {of Israel}, {hear} {these} {words}; {Jesus} {of Nazareth}, {a man} {approved} {of} {God} {among} {you} {by} {miracles} {and} {wonders} {and} {signs}, {which} {God} {did} {by} {him} {in} {the midst} {of you}, {as} {ye yourselves} {also} {know}: }\par 
+}
+-- Verse osisID list Link test
+{\rtf1\ansi{\fonttbl{\f0\froman\fcharset0\fprq2 Times New Roman;}{\f1\fdecor\fprq2 Gentium;}{\f7\froman\fcharset2\fprq2 Symbol;}}Acts 2:21: {\f1 {And} {it shall come to pass}, {\i1 that} {whosoever} {shall call on} {the name} {of the Lord} {shall be saved}. (22) {Ye men} {of Israel}, {hear} {these} {words}; {Jesus} {of Nazareth}, {a man} {approved} {of} {God} {among} {you} {by} {miracles} {and} {wonders} {and} {signs}, {which} {God} {did} {by} {him} {in} {the midst} {of you}, {as} {ye yourselves} {also} {know}: }\par 
 Acts 2:22: {\f1 {And} {it shall come to pass}, {\i1 that} {whosoever} {shall call on} {the name} {of the Lord} {shall be saved}. (22) {Ye men} {of Israel}, {hear} {these} {words}; {Jesus} {of Nazareth}, {a man} {approved} {of} {God} {among} {you} {by} {miracles} {and} {wonders} {and} {signs}, {which} {God} {did} {by} {him} {in} {the midst} {of you}, {as} {ye yourselves} {also} {know}: }\par 
+}
+-- Div osisReference range Link test
+{\rtf1\ansi{\fonttbl{\f0\froman\fcharset0\fprq2 Times New Roman;}{\f1\fdecor\fprq2 Gentium;}{\f7\froman\fcharset2\fprq2 Symbol;}}Genesis 1:6: {\f1  {\fi200\par}{\b1 La création de l'univers}{\par}{\fi200\par}Avant que rien n'existe………{\par}{\fi200\par}Ce récit, à la fois majestueux et simple………{\par} }\par 
+Genesis 1:7: {\f1  {\fi200\par}{\b1 La création de l'univers}{\par}{\fi200\par}Avant que rien n'existe………{\par}{\fi200\par}Ce récit, à la fois majestueux et simple………{\par} }\par 
 }
