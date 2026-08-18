@@ -13,15 +13,30 @@
 # not, then this file is released under the GPLv2 by myself.
 
 CMAKE_POLICY(SET CMP0010 NEW)
-include(FindSubversion)
-Subversion_WC_INFO(${CMAKE_CURRENT_SOURCE_DIR} MYSVN IGNORE_SVN_FAILURE)
 
 PROJECT(libsword CXX C)
 CMAKE_MINIMUM_REQUIRED(VERSION 2.6.0)
 SET(SWORD_VERSION 1.9.0)
-if(DEFINED MYSVN_WC_REVISION)
-	SET(SWORD_VERSION ${SWORD_VERSION}.${MYSVN_WC_REVISION})
-endif(DEFINED MYSVN_WC_REVISION)
+
+# repository revision suffix: git commit count when building from a git
+# checkout; svn revision when building from an svn checkout; omitted otherwise
+# (keep in step with configure.ac)
+find_package(Git QUIET)
+if(GIT_FOUND AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/.git")
+	execute_process(COMMAND ${GIT_EXECUTABLE} rev-list --count HEAD
+		WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+		OUTPUT_VARIABLE SWORD_REV OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+endif()
+if(NOT SWORD_REV)
+	include(FindSubversion)
+	Subversion_WC_INFO(${CMAKE_CURRENT_SOURCE_DIR} MYSVN IGNORE_SVN_FAILURE)
+	if(DEFINED MYSVN_WC_REVISION)
+		SET(SWORD_REV ${MYSVN_WC_REVISION})
+	endif()
+endif()
+if(SWORD_REV)
+	SET(SWORD_VERSION ${SWORD_VERSION}.${SWORD_REV})
+endif()
 
 # Make sure it's an out-of-stream build
 IF(${CMAKE_CURRENT_BINARY_DIR} STREQUAL ${CMAKE_CURRENT_SOURCE_DIR})
