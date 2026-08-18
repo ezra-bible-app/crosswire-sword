@@ -12,10 +12,10 @@
 # all posterity and eternity, wherever such transfer is possible.  Where it is
 # not, then this file is released under the GPLv2 by myself.
 
+CMAKE_MINIMUM_REQUIRED(VERSION 2.6...3.5)
 CMAKE_POLICY(SET CMP0010 NEW)
 
 PROJECT(libsword CXX C)
-CMAKE_MINIMUM_REQUIRED(VERSION 2.6.0)
 SET(SWORD_VERSION 1.9.0)
 
 # repository revision suffix: git commit count when building from a git
