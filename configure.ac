@@ -2,11 +2,15 @@
 # Initialisation
 # ---------------------------------------------------------------------
 
-# Version change: Change line 9 only !
+# Version change: Change the swordbase line only !
 # Change it immediately after a release
 
-define([svnversion], esyscmd([sh -c "svnversion -n"]))dnl
-AC_INIT(sword, 1.9.0.svnversion, sword-bugs@crosswire.org, sword, http://crosswire.org/sword)
+define([swordbase], [1.9.0])dnl
+dnl repository revision suffix: git commit count when building from a git
+dnl checkout; svn revision when building from an svn checkout; omitted otherwise
+define([swordrev], esyscmd([sh -c "(git rev-list --count HEAD 2>/dev/null || svnversion -n 2>/dev/null | cut -d: -f1) | tr -cd 0-9"]))dnl
+define([swordver], swordbase[]ifelse(swordrev, [], [], [.]swordrev))dnl
+AC_INIT(sword, swordver, sword-bugs@crosswire.org, sword, http://crosswire.org/sword)
 AC_CONFIG_SRCDIR(sword.bmp)
 AC_PREREQ(2.52)
 AC_REVISION($Revision: 1.45 $)
