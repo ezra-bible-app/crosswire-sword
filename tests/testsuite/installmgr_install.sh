@@ -44,6 +44,19 @@ im -u GBSSecond -u GBSReference -l
 im_dest
 
 echo
+echo "== uninstall a module which lives in an augmented (e.g. shared) library: its conf and data go from there"
+# build a second library by installing into it, then use it only as an augment of dest
+im -ri CrossWire GBSSecond > /dev/null
+mv $IMPRIV/dest $IMPRIV/other
+mkdir -p $IMPRIV/dest/mods.d
+im --augment $IMPRIV/other -l
+im --augment $IMPRIV/other -u GBSSecond -l
+echo "other files:"
+(cd $IMPRIV/other && find . -type f | grep -v modules-conf.cache | sort | sed 's/^/\t/')
+im_dest
+rm -rf $IMPRIV/other
+
+echo
 echo "== https down: package over ftp"
 im --fail https -ri CrossWire GBSReference -l
 im -u GBSReference > /dev/null

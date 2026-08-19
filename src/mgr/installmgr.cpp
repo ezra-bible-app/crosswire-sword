@@ -299,7 +299,17 @@ int InstallMgr::removeModule(SWMgr *manager, const char *moduleName) {
 
 		SWBuf modFile;
 		SWBuf modDir;
-		SWBuf destRoot = manager->configPath;
+		// the module's .conf lives in the mods.d of the library it was found
+		// in (PrefixPath, set by SWMgr), which is not necessarily manager's
+		// base library if it came in through augmentModules
+		SWBuf destRoot;
+		entry = module->second.find("PrefixPath");
+		if (entry != module->second.end() && entry->second.length()) {
+			destRoot = entry->second;
+			removeTrailingSlash(destRoot);
+			destRoot += "/mods.d";
+		}
+		else destRoot = manager->configPath;
 		removeTrailingSlash(destRoot);
 		destRoot += "/";
 		entry = module->second.find("AbsoluteDataPath");

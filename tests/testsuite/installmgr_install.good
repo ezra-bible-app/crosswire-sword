@@ -42,6 +42,17 @@ Installed Modules:
 	0 modules
 dest files:
 
+== uninstall a module which lives in an augmented (e.g. shared) library: its conf and data go from there
+Installed Modules:
+	[GBSSecond] (2.1) - Second Test Module
+	1 modules
+	[GBSSecond] InstallSourceID=20081216195754 InstallSourceCaption=CrossWire
+removeModule(GBSSecond): OK (0)
+Installed Modules:
+	0 modules
+other files:
+dest files:
+
 == https down: package over ftp
 MOCK FAIL RULE: https://* -> -2
 MOCK http GET https://crosswire.org/ftpmirror/pub/sword/raw/packages/GBSReference.zip -> -2 (timeout=10000)

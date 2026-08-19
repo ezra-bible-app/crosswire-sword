@@ -25,6 +25,9 @@
  *   <privatePath>/dest
  *
  *   options:
+ *     --augment <path>       also augment the destination SWMgr from library
+ *                            <path> (like a shared or second library), so
+ *                            modules there can be listed and uninstalled
  *     --fail <scheme>[=<code>]        make every request through <scheme> fail
  *     --fail <urlPrefix>[=<code>]     make every request for a URL starting with
  *                            <urlPrefix> (e.g., https://host/path) fail
@@ -214,6 +217,7 @@ public:
 static SWBuf privatePath;
 static SWBuf destPath;
 static SWBuf confPath;
+static std::vector<SWBuf> augmentPaths;
 static TestInstallMgr *installMgr = 0;
 static SWMgr *destMgr = 0;
 
@@ -226,6 +230,8 @@ static void init() {
 	}
 	if (!destMgr) {
 		destMgr = new SWMgr(destPath.c_str(), true, 0, false, false);
+		for (unsigned int i = 0; i < augmentPaths.size(); ++i)
+			destMgr->augmentModules(augmentPaths[i].c_str(), false);
 	}
 }
 
@@ -405,6 +411,10 @@ int main(int argc, char **argv) {
 	for (int i = 3; i < argc; i++) {
 		if (!strcmp(argv[i], "-d")) {
 			SWLog::getSystemLog()->setLogLevel(SWLog::LOG_DEBUG);
+		}
+		else if (!strcmp(argv[i], "--augment")) {
+			if (i+1 >= argc) usage(*argv, "--augment requires <path>");
+			augmentPaths.push_back(argv[++i]);
 		}
 		else if (!strcmp(argv[i], "--fail")) {
 			if (i+1 >= argc) usage(*argv, "--fail requires <scheme>[://host][=code]");
