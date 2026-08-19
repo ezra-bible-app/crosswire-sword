@@ -54,6 +54,9 @@ public class SWORD extends CordovaPlugin {
 	public static SWMgr mgr = null;
 	public static InstallMgr installMgr = null;
 	private CallbackContext sendContext = null;
+	private CallbackContext chooseSharedStorageContext = null;
+	private static final int REQUEST_SEND = 1;
+	private static final int REQUEST_CHOOSE_SHARED_STORAGE = 2;
 
 	/**
 	* Constructor.
@@ -467,6 +470,26 @@ Log.d(TAG, "... finished renderChapter");
 			String prefixPath = mgr.getPrefixPath();
 			callbackContext.success(prefixPath);
 		}
+		else if (action.equals("SWMgr_getSharedStorage")) {
+			// the shared module library folder in use, or "" for private storage only
+			android.net.Uri uri = ((AndroidMgr)mgr).getSharedStorageUri();
+			callbackContext.success(uri != null ? uri.toString() : "");
+		}
+		else if (action.equals("SWMgr_chooseSharedStorage")) {
+			// let the user pick (or create) a folder shared between SWORD apps
+			// and use it as the module library; calls back with its uri, or
+			// "" if the user cancelled
+			chooseSharedStorageContext = callbackContext;
+			cordova.startActivityForResult(this, AndroidMgr.createOpenSharedStorageIntent(), REQUEST_CHOOSE_SHARED_STORAGE);
+			PluginResult pending = new PluginResult(PluginResult.Status.NO_RESULT);
+			pending.setKeepCallback(true);
+			callbackContext.sendPluginResult(pending);
+		}
+		else if (action.equals("SWMgr_clearSharedStorage")) {
+			// go back to private storage only
+			((AndroidMgr)mgr).setSharedStorageUri(null);
+			callbackContext.success();
+		}
 		else if (action.equals("SWMgr_setGlobalOption")) {
 			String option = args.getString(0);
 			String value = args.getString(1);
@@ -782,15 +805,28 @@ Log.i(TAG, "an exception occurred in makeRequest thread: " + e);
 				sendIntent.putExtra(Intent.EXTRA_SUBJECT, subject);
 				sendIntent.putExtra(android.content.Intent.EXTRA_TEXT, message);
 
-				cordova.startActivityForResult(plugin, Intent.createChooser(sendIntent, null), 1);
+				cordova.startActivityForResult(plugin, Intent.createChooser(sendIntent, null), REQUEST_SEND);
 			}
 		});
 	}
 
 	public void onActivityResult(int requestCode, int resultCode, Intent intent) {
 		switch (requestCode) {
-		case 1: 
+		case REQUEST_SEND:
 			sendContext.sendPluginResult(new PluginResult(PluginResult.Status.OK, resultCode == Activity.RESULT_OK));
+			break;
+		case REQUEST_CHOOSE_SHARED_STORAGE:
+			String result = "";
+			if (resultCode == Activity.RESULT_OK && intent != null && intent.getData() != null) {
+				((AndroidMgr)mgr).setSharedStorageUri(intent.getData());
+				android.net.Uri uri = ((AndroidMgr)mgr).getSharedStorageUri();
+				result = (uri != null) ? uri.toString() : "";
+			}
+			if (chooseSharedStorageContext != null) {
+				chooseSharedStorageContext.success(result);
+				chooseSharedStorageContext = null;
+			}
+			break;
 		}
 		super.onActivityResult(requestCode, resultCode, intent);
 	}

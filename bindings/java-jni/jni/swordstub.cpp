@@ -47,6 +47,7 @@
 #endif
 
 #include "webmgr.hpp"
+#include "sharedstoragefileops.hpp"
 #include "org_crosswire_android_sword_SWMgr.h"
 #include "org_crosswire_android_sword_SWModule.h"
 #include "org_crosswire_android_sword_InstallMgr.h"
@@ -60,6 +61,7 @@ using namespace sword;
 
 namespace {
     bool firstInit = true;
+    bool setupStorage = true;	// create a basic library config where there is none; reset by reInit
     bool firstInstallInit = true;
     JavaVM *javaVM = nullptr;
     WebMgr *mgr = nullptr;
@@ -72,6 +74,7 @@ namespace {
     JNIEnv *bibleSyncListenerEnv = nullptr;
 #endif
     SWBuf STORAGE_BASE;
+    bool sharedStorage = false;	// a SharedStorageFileOps is installed; SHARED_STORAGE_PATH is live
     const char *OLD_SDCARD_PATH = "/sdcard/sword";
     const char *SDCARD_PATH = "/sdcard/Documents/sword";
     const char *AND_BIBLE_MODULES_PATH = "/sdcard/Android/data/net.bible.android.activity/files";
@@ -238,24 +241,42 @@ static void init(JNIEnv *env) {
 	}
 	if (!mgr) {
 SWLOGI("libsword: init() begin");
-		SWBuf baseDir  = SDCARD_PATH;
-		SWBuf confPath = baseDir + "/mods.d/globals.conf";
-		// be sure we have at least some config file already out there
-		if (!FileMgr::existsFile(confPath.c_str()) && firstInit) {
+		SWBuf baseDir;
+		SWBuf confPath;
+		// a shared library between SWORD apps, reached through the app's
+		// SharedStorage (see SWMgr.getSharedStorage()), wins if we have one
+		if (sharedStorage) {
+			baseDir  = SHARED_STORAGE_PATH;
+			confPath = baseDir + "/mods.d/globals.conf";
+			if (!FileMgr::existsFile(confPath.c_str()) && setupStorage) {
+SWLOGI("libsword: init() sword config not found in shared storage, attempting to create parent of: %s", confPath.c_str());
+				FileMgr::createParent(confPath.c_str());
+SWLOGI("libsword: init() saving basic: %s", confPath.c_str());
+				SWConfig config(confPath.c_str());
+				config["Globals"]["HiAndroid"] = "weeee";
+				config.save();
+			}
+		}
+		if (!sharedStorage || !FileMgr::existsFile(confPath.c_str())) {
+			baseDir  = SDCARD_PATH;
+			confPath = baseDir + "/mods.d/globals.conf";
+			// be sure we have at least some config file already out there
+			if (!FileMgr::existsFile(confPath.c_str()) && setupStorage) {
 SWLOGI("libsword: init() sword config not found, attempting to create parent of: %s", confPath.c_str());
-			FileMgr::createParent(confPath.c_str());
-			remove(confPath.c_str());
+				FileMgr::createParent(confPath.c_str());
+				remove(confPath.c_str());
 
 SWLOGI("libsword: init() saving basic: %s", confPath.c_str());
-			SWConfig config(confPath.c_str());
-			config["Globals"]["HiAndroid"] = "weeee";
-			config.save();
+				SWConfig config(confPath.c_str());
+				config["Globals"]["HiAndroid"] = "weeee";
+				config.save();
+			}
 		}
 		if (!FileMgr::existsFile(confPath.c_str())) {
 			baseDir = OLD_SDCARD_PATH;
 			confPath = baseDir + "/mods.d/globals.conf";
 			SWLOGI("libsword: init() sword config STILL not found, switching to STORAGE_PATH (parent of): %s", confPath.c_str());
-			if (!FileMgr::existsFile(confPath.c_str()) && firstInit) {
+			if (!FileMgr::existsFile(confPath.c_str()) && setupStorage) {
 				FileMgr::createParent(confPath.c_str());
 				remove(confPath.c_str());
 				SWLOGI("libsword: init() saving basic: %s", confPath.c_str());
@@ -268,7 +289,7 @@ SWLOGI("libsword: init() saving basic: %s", confPath.c_str());
 			baseDir = STORAGE_BASE;
 			confPath = baseDir + "/mods.d/globals.conf";
 SWLOGI("libsword: init() sword config STILL not found, switching to STORAGE_PATH (parent of): %s", confPath.c_str());
-			if (!FileMgr::existsFile(confPath.c_str()) && firstInit) {
+			if (!FileMgr::existsFile(confPath.c_str()) && setupStorage) {
 				FileMgr::createParent(confPath.c_str());
 				remove(confPath.c_str());
 SWLOGI("libsword: init() saving basic: %s", confPath.c_str());
@@ -290,6 +311,10 @@ SWLOGI("libsword: extraConfig %s at path: %s", exists?"Exists":"Absent", confPat
 SWLOGI("libsword: init() creating WebMgr using path: %s", baseDir.c_str());
 		mgr = new WebMgr(baseDir, exists?confPath.c_str():nullptr);
 
+		if (sharedStorage && strcmp(baseDir.c_str(), SHARED_STORAGE_PATH)) { // NOLINT(bugprone-suspicious-string-compare)
+SWLOGI("libsword: init() augmenting modules from: %s", SHARED_STORAGE_PATH);
+			mgr->augmentModules(SHARED_STORAGE_PATH, true);
+		}
 SWLOGI("libsword: init() augmenting modules from: %s", AND_BIBLE_MODULES_PATH);
 		// for And Bible modules
 		mgr->augmentModules(AND_BIBLE_MODULES_PATH, true);
@@ -309,6 +334,10 @@ SWLOGI("libsword: init() augmenting modules from: %s", STORAGE_BASE.c_str());
 			mgr->augmentModules(STORAGE_BASE, true);
 		}
 SWLOGI("libsword: init() adding locales from baseDir.");
+		if (sharedStorage) {
+			LocaleMgr::getSystemLocaleMgr()->loadConfigDir(SHARED_STORAGE_PATH "/locales.d");
+			LocaleMgr::getSystemLocaleMgr()->loadConfigDir(SHARED_STORAGE_PATH "/uilocales.d");
+		}
 		LocaleMgr::getSystemLocaleMgr()->loadConfigDir(SWBuf(STORAGE_BASE + "/locales.d").c_str());
 		LocaleMgr::getSystemLocaleMgr()->loadConfigDir(SWBuf(STORAGE_BASE + "/uilocales.d").c_str());
 		LocaleMgr::getSystemLocaleMgr()->loadConfigDir((SWBuf(SDCARD_PATH) + "/locales.d").c_str());
@@ -319,6 +348,7 @@ SWLOGI("libsword: init() adding locales from baseDir.");
 		mgr->setGlobalOption("Footnotes", "On");
 		mgr->setGlobalOption("Cross-references", "On");
 SWLOGI("libsword: init() end.");
+		setupStorage = false;
 	}
 	firstInit = false;
 }
@@ -331,17 +361,34 @@ void initInstall(JNIEnv *env, jobject progressReporter = nullptr) {
 	installStatusReporter->init(env, progressReporter);
 	if (!installMgr) {
 SWLOGI("initInstall: installMgr is null");
-		SWBuf baseDir  = SDCARD_PATH;
-		baseDir += "/InstallMgr";
-		SWBuf confPath = baseDir + "/InstallMgr.conf";
-		// be sure we have at least some config file already out there
+		SWBuf baseDir;
+		SWBuf confPath;
+		if (sharedStorage) {
+			baseDir  = SHARED_STORAGE_PATH;
+			baseDir += "/InstallMgr";
+			confPath = baseDir + "/InstallMgr.conf";
 SWLOGI("initInstall: confPath: %s", confPath.c_str());
-		if (!FileMgr::existsFile(confPath.c_str()) && firstInstallInit) {
+			if (!FileMgr::existsFile(confPath.c_str()) && firstInstallInit) {
 SWLOGI("initInstall: file doesn't exist: %s", confPath.c_str());
-			FileMgr::createParent(confPath.c_str());
-			SWConfig config(confPath.c_str());
-			config["General"]["PassiveFTP"] = "true";
-			config.save();
+				FileMgr::createParent(confPath.c_str());
+				SWConfig config(confPath.c_str());
+				config["General"]["PassiveFTP"] = "true";
+				config.save();
+			}
+		}
+		if (!sharedStorage || !FileMgr::existsFile(confPath.c_str())) {
+			baseDir  = SDCARD_PATH;
+			baseDir += "/InstallMgr";
+			confPath = baseDir + "/InstallMgr.conf";
+			// be sure we have at least some config file already out there
+SWLOGI("initInstall: confPath: %s", confPath.c_str());
+			if (!FileMgr::existsFile(confPath.c_str()) && firstInstallInit) {
+SWLOGI("initInstall: file doesn't exist: %s", confPath.c_str());
+				FileMgr::createParent(confPath.c_str());
+				SWConfig config(confPath.c_str());
+				config["General"]["PassiveFTP"] = "true";
+				config.save();
+			}
 		}
 		if (!FileMgr::existsFile(confPath.c_str())) {
 			baseDir = OLD_SDCARD_PATH;
@@ -456,8 +503,27 @@ JNIEXPORT void JNICALL Java_org_crosswire_android_sword_SWMgr_reInit
 	env->ReleaseStringUTFChars(basePathJS, basePath);
 SWLOGI("setting STORAGE_BASE to: %s", STORAGE_BASE.c_str());
 
+	// route SHARED_STORAGE_PATH to the app's SharedStorage, if it offers one;
+	// otherwise plain paths only
+	jmethodID getSharedStorage = env->GetMethodID(swmgrClass, "getSharedStorage", "()Lorg/crosswire/android/sword/SWMgr$SharedStorage;");
+	jobject storage = env->CallObjectMethod(me, getSharedStorage);
+	if (storage) {
+SWLOGI("installing SharedStorageFileOps at %s", SHARED_STORAGE_PATH);
+		FileMgr::setSystemFileOps(new SharedStorageFileOps(env, storage));
+		env->DeleteLocalRef(storage);
+		sharedStorage = true;
+	}
+	else {
+		FileMgr::setSystemFileOps(new FileOps());
+		sharedStorage = false;
+	}
+	setupStorage = true;		// create a basic config in the new location if there is none
+	firstInstallInit = true;
+
 	delete mgr;
 	mgr = nullptr;
+	delete installMgr;
+	installMgr = nullptr;
 }
 
 

@@ -223,7 +223,7 @@ LOCAL_CFLAGS	+= -D__unix__ \
 
 LOCAL_LDLIBS	+= -lz -llog
 
-LOCAL_SRC_FILES := swordstub.cpp
+LOCAL_SRC_FILES := swordstub.cpp sharedstoragefileops.cpp
 
 LOCAL_STATIC_LIBRARIES := libswordcore
 

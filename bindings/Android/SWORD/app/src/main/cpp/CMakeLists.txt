@@ -45,6 +45,7 @@ add_library( # Sets the name of the library.
 
              # Provides a relative path to your source file(s).
         jni/swordstub.cpp
+        jni/sharedstoragefileops.cpp
         utilfuns/swversion.cpp
         modules/comments/zcom/zcom.cpp
         modules/comments/zcom4/zcom4.cpp

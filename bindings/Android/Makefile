@@ -1,12 +1,12 @@
 all: javawrapper
 	mkdir -p ../cordova/cordova-plugin-crosswire-sword/libs/android
 	rm -rf ../cordova/cordova-plugin-crosswire-sword/libs/android/*
-	cp -a SWORD/app/build/intermediates/stripped_native_libs/release/out/lib/* ../cordova/cordova-plugin-crosswire-sword/libs/android/
+	cp -a SWORD/app/build/intermediates/stripped_native_libs/release/stripReleaseDebugSymbols/out/lib/* ../cordova/cordova-plugin-crosswire-sword/libs/android/
 #	cp -a SWORD/app/build/intermediates/transforms/stripDebugSymbol/release/0/lib/* ../cordova/cordova-plugin-crosswire-sword/libs/android/
 
 debug: javawrapper
 	rm -rf ../cordova/cordova-plugin-crosswire-sword/libs/android/*
-	cp -a SWORD/app/build/intermediates/stripped_native_libs/debug/out/lib/* ../cordova/cordova-plugin-crosswire-sword/libs/android/
+	cp -a SWORD/app/build/intermediates/stripped_native_libs/debug/stripDebugDebugSymbols/out/lib/* ../cordova/cordova-plugin-crosswire-sword/libs/android/
 #	cp -a SWORD/app/build/intermediates/merged_native_libs/debug/out/lib/* ../cordova/cordova-plugin-crosswire-sword/libs/android/
 
 javawrapper:

@@ -24,14 +24,27 @@ package org.crosswire.android.sword;
 
 import android.app.Application;
 import android.content.Context;
+import android.content.Intent;
+import android.content.SharedPreferences;
+import android.content.UriPermission;
+import android.net.Uri;
+import android.os.Build;
+import android.util.Log;
 
 public class AndroidMgr extends SWMgr {
 
+	private static final String TAG = "AndroidMgr";
+	/** SharedPreferences file and key under which the shared library tree Uri is kept */
+	public static final String PREFS = "org.crosswire.android.sword";
+	public static final String PREF_SHARED_STORAGE_URI = "sharedStorageUri";
+
 	private Application app;
+	private SafStorage sharedStorage;
 
 	public AndroidMgr(Application app) {
 		super(false);
 		this.app = app;
+		loadSharedStorage();
 		reInit();
 	}
 
@@ -40,6 +53,78 @@ public class AndroidMgr extends SWMgr {
 		Context context = app.getApplicationContext();
 		return context.getFilesDir().getAbsolutePath();
 	}
+
+	/**
+	 * The shared module library, if the user has picked one (see
+	 * setSharedStorageUri); null means this app's private storage only.
+	 */
+	@Override
+	public SharedStorage      getSharedStorage() {
+		return sharedStorage;
+	}
+
+	public Uri                getSharedStorageUri() {
+		return (sharedStorage != null) ? sharedStorage.getTreeUri() : null;
+	}
+
+	/**
+	 * Use (or stop using, with null) a document tree as the shared module
+	 * library.  Typically the result of Intent.ACTION_OPEN_DOCUMENT_TREE:
+	 * the grant is persisted and remembered across restarts, and the
+	 * library is re-initialized on it.
+	 */
+	public void               setSharedStorageUri(Uri treeUri) {
+		Context context = app.getApplicationContext();
+		SharedPreferences prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+		if (treeUri != null) {
+			try {
+				context.getContentResolver().takePersistableUriPermission(treeUri,
+					Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+			}
+			catch (SecurityException e) {
+				Log.w(TAG, "could not persist grant for " + treeUri + ": " + e);
+			}
+			prefs.edit().putString(PREF_SHARED_STORAGE_URI, treeUri.toString()).apply();
+		}
+		else {
+			prefs.edit().remove(PREF_SHARED_STORAGE_URI).apply();
+		}
+		loadSharedStorage();
+		reInit();
+	}
+
+	/** the picker Intent for choosing a shared library folder; start it
+	 * for a result and pass the returned data Uri to setSharedStorageUri */
+	public static Intent      createOpenSharedStorageIntent() {
+		Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
+		intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION
+			| Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+			| Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+			| Intent.FLAG_GRANT_PREFIX_URI_PERMISSION);
+		return intent;
+	}
+
+	private void              loadSharedStorage() {
+		sharedStorage = null;
+		Context context = app.getApplicationContext();
+		String uriString = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(PREF_SHARED_STORAGE_URI, null);
+		if (uriString == null) return;
+		Uri treeUri = Uri.parse(uriString);
+
+		// still granted?
+		boolean granted = false;
+		for (UriPermission p : context.getContentResolver().getPersistedUriPermissions()) {
+			if (p.getUri().equals(treeUri) && p.isReadPermission() && p.isWritePermission()) { granted = true; break; }
+		}
+		if (!granted) {
+			Log.w(TAG, "grant for shared storage " + treeUri + " is gone; using private storage");
+			return;
+		}
+		SafStorage storage = new SafStorage(context, treeUri);
+		if (!storage.isAvailable()) {
+			Log.w(TAG, "shared storage " + treeUri + " is not reachable; using private storage");
+			return;
+		}
+		sharedStorage = storage;
+	}
 }
-
-

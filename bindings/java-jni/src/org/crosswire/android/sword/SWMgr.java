@@ -83,6 +83,57 @@ public class SWMgr {
 	public String             getStorageBasePath() {
 		return ".";
 	}
+
+	/**
+	 * The virtual path under which the native library sees a SharedStorage
+	 * (see getSharedStorage()).  e.g., the module library of a SharedStorage
+	 * is at SHARED_STORAGE_PATH + "/mods.d"
+	 */
+	public static final String SHARED_STORAGE_PATH = "/sword-shared";
+
+	public static class FileInfo {
+		public String name;
+		public long size;
+		public long modTime;		// seconds since the epoch; 0 if unknown
+		public boolean isDirectory;
+	}
+
+	/**
+	 * A file store the native library can only reach through a callback
+	 * rather than an ordinary path, e.g., an Android folder shared between
+	 * apps and granted through the Storage Access Framework.  The library
+	 * addresses it as SHARED_STORAGE_PATH + "/" + path and FileMgr routes
+	 * those paths here; everything else goes straight to the OS.
+	 *
+	 * paths are relative to the store root, '/'-separated, never start
+	 * with '/'; "" is the root itself.
+	 */
+	public static interface SharedStorage {
+		/**
+		 * @param mode "r", "rw", "rwt" (truncate), or "wa" (append)
+		 * @param create create the file if it doesn't exist
+		 * @return a detached OS file descriptor (the caller owns it and
+		 *	will read/write/seek/close it directly), or -1 on failure
+		 */
+		public int        open(String path, String mode, boolean create);
+		/** @return info about path, or null if it doesn't exist */
+		public FileInfo   stat(String path);
+		/** @return contents of directory path (excluding . and ..), or null if not a directory */
+		public FileInfo[] list(String path);
+		/** create one directory; parent must exist */
+		public boolean    mkdir(String path);
+		/** remove a file or empty directory */
+		public boolean    remove(String path);
+	}
+
+	/**
+	 * override in platform descendant to expose a shared module library
+	 * which can't be reached through ordinary paths.
+	 * @return null if the library should use plain paths only
+	 */
+	public SharedStorage      getSharedStorage() {
+		return null;
+	}
 	public static interface BibleSyncListener {
 		public void navReceived(String osisRef);
 		public void chatReceived(String user, String message);

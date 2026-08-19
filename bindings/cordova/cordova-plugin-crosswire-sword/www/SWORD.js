@@ -439,6 +439,34 @@ SWMgr.prototype.getPrefixPath = function(callback) {
 	);
 }
 
+// A folder shared between SWORD apps used as the module library (Android:
+// a Storage Access Framework document tree).  Calls back with its uri, or ""
+// if the app is using its private storage only.
+SWMgr.prototype.getSharedStorage = function(callback) {
+	exec(callback?callback:function() {},
+		function(err) { utils.alert('[ERROR] problem: ' + err); },
+		"SWORD", "SWMgr_getSharedStorage", []
+	);
+}
+
+// Let the user pick (or create) a shared library folder.  SWORD is
+// re-initialized on it.  Calls back with the folder's uri, or "" if the user
+// cancelled.  Module lists should be refreshed afterward.
+SWMgr.prototype.chooseSharedStorage = function(callback) {
+	exec(callback?callback:function() {},
+		function(err) { utils.alert('[ERROR] problem: ' + err); },
+		"SWORD", "SWMgr_chooseSharedStorage", []
+	);
+}
+
+// Stop using a shared library folder; back to private storage only.
+SWMgr.prototype.clearSharedStorage = function(callback) {
+	exec(callback?callback:function() {},
+		function(err) { utils.alert('[ERROR] problem: ' + err); },
+		"SWORD", "SWMgr_clearSharedStorage", []
+	);
+}
+
 function HTTPUtils() {}
 
 HTTPUtils.prototype.METHOD_GET  =  0;
