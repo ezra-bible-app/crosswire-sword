@@ -12,7 +12,7 @@ noinst_PROGRAMS = utf8norm ciphertest keytest mgrtest parsekey versekeytest \
 			compnone complzss localetest introtest indextest \
 			configtest keycast romantest testblocks filtertest \
 			rawldidxtest lextest swaptest swbuftest xmltest \
-			webiftest striptest ldtest osistest bibliotest
+			webiftest striptest ldtest osistest bibliotest installmgrtest
 
 if WITHCURL
 noinst_PROGRAMS += httptest
@@ -76,4 +76,5 @@ ldtest_SOURCES = ldtest.cpp
 osistest_SOURCES = osistest.cpp
 bibliotest_SOURCES = bibliotest.cpp
 httptest_SOURCES = httptest.cpp
+installmgrtest_SOURCES = installmgrtest.cpp
 

@@ -1,0 +1,158 @@
+== install from package over https
+MOCK http GET https://crosswire.org/ftpmirror/pub/sword/raw/packages/GBSReference.zip -> 0 (timeout=10000)
+installModule(CrossWire, GBSReference): OK (0)
+Installed Modules:
+	[GBSReference] (1.0) - GBS Reference Test Module
+	1 modules
+	[GBSReference] InstallSourceID=20081216195754 InstallSourceCaption=CrossWire
+dest files:
+	./mods.d/gbsreference.conf
+	./modules/gbsreference/gbsreference.bdt
+	./modules/gbsreference/gbsreference.dat
+	./modules/gbsreference/gbsreference.idx
+
+== install module without a package: data directory over ftp (PackagePreference is never walked)
+MOCK http GET https://crosswire.org/ftpmirror/pub/sword/raw/packages/GBSSecond.zip -> -5 (timeout=10000)
+MOCK ftp GET ftp://ftp.crosswire.org/pub/sword/raw/packages/GBSSecond.zip -> -4 (timeout=10000)
+MOCK ftp LIST ftp://ftp.crosswire.org/pub/sword/raw/modules/gbssecond/ -> 3 entries
+MOCK ftp GET ftp://ftp.crosswire.org/pub/sword/raw/modules/gbssecond/gbssecond.bdt -> 0 (timeout=10000)
+MOCK ftp GET ftp://ftp.crosswire.org/pub/sword/raw/modules/gbssecond/gbssecond.dat -> 0 (timeout=10000)
+MOCK ftp GET ftp://ftp.crosswire.org/pub/sword/raw/modules/gbssecond/gbssecond.idx -> 0 (timeout=10000)
+installModule(CrossWire, GBSSecond): OK (0)
+Installed Modules:
+	[GBSReference] (1.0) - GBS Reference Test Module
+	[GBSSecond] (2.1) - Second Test Module
+	2 modules
+	[GBSReference] InstallSourceID=20081216195754 InstallSourceCaption=CrossWire
+	[GBSSecond] InstallSourceID=20081216195754 InstallSourceCaption=CrossWire
+dest files:
+	./mods.d/gbsreference.conf
+	./mods.d/gbssecond.conf
+	./modules/gbsreference/gbsreference.bdt
+	./modules/gbsreference/gbsreference.dat
+	./modules/gbsreference/gbsreference.idx
+	./modules/gbssecond/gbssecond.bdt
+	./modules/gbssecond/gbssecond.dat
+	./modules/gbssecond/gbssecond.idx
+
+== uninstall
+removeModule(GBSSecond): OK (0)
+removeModule(GBSReference): OK (0)
+Installed Modules:
+	0 modules
+dest files:
+
+== https down: package over ftp
+MOCK FAIL RULE: https://* -> -2
+MOCK http GET https://crosswire.org/ftpmirror/pub/sword/raw/packages/GBSReference.zip -> -2 (timeout=10000)
+MOCK ftp GET ftp://ftp.crosswire.org/pub/sword/raw/packages/GBSReference.zip -> 0 (timeout=10000)
+installModule(CrossWire, GBSReference): OK (0)
+Installed Modules:
+	[GBSReference] (1.0) - GBS Reference Test Module
+	1 modules
+	[GBSReference] InstallSourceID=20081216195754 InstallSourceCaption=CrossWire
+
+== https down, no ftp package: data directory over ftp
+MOCK FAIL RULE: https://* -> -2
+MOCK http GET https://crosswire.org/ftpmirror/pub/sword/raw/packages/GBSReference.zip -> -2 (timeout=10000)
+MOCK ftp GET ftp://ftp.crosswire.org/pub/sword/raw/packages/GBSReference.zip -> -4 (timeout=10000)
+MOCK ftp LIST ftp://ftp.crosswire.org/pub/sword/raw/modules/gbsreference/ -> 3 entries
+MOCK ftp GET ftp://ftp.crosswire.org/pub/sword/raw/modules/gbsreference/gbsreference.bdt -> 0 (timeout=10000)
+MOCK ftp GET ftp://ftp.crosswire.org/pub/sword/raw/modules/gbsreference/gbsreference.dat -> 0 (timeout=10000)
+MOCK ftp GET ftp://ftp.crosswire.org/pub/sword/raw/modules/gbsreference/gbsreference.idx -> 0 (timeout=10000)
+installModule(CrossWire, GBSReference): OK (0)
+Installed Modules:
+	[GBSReference] (1.0) - GBS Reference Test Module
+	1 modules
+	[GBSReference] InstallSourceID=20081216195754 InstallSourceCaption=CrossWire
+
+== https package missing: ftp package missing too: ftp data directory
+MOCK http GET https://crosswire.org/ftpmirror/pub/sword/raw/packages/GBSReference.zip -> -5 (timeout=10000)
+MOCK ftp GET ftp://ftp.crosswire.org/pub/sword/raw/packages/GBSReference.zip -> -4 (timeout=10000)
+MOCK ftp LIST ftp://ftp.crosswire.org/pub/sword/raw/modules/gbsreference/ -> 3 entries
+MOCK ftp GET ftp://ftp.crosswire.org/pub/sword/raw/modules/gbsreference/gbsreference.bdt -> 0 (timeout=10000)
+MOCK ftp GET ftp://ftp.crosswire.org/pub/sword/raw/modules/gbsreference/gbsreference.dat -> 0 (timeout=10000)
+MOCK ftp GET ftp://ftp.crosswire.org/pub/sword/raw/modules/gbsreference/gbsreference.idx -> 0 (timeout=10000)
+installModule(CrossWire, GBSReference): OK (0)
+Installed Modules:
+	[GBSReference] (1.0) - GBS Reference Test Module
+	1 modules
+	[GBSReference] InstallSourceID=20081216195754 InstallSourceCaption=CrossWire
+
+== a plain HTTPSSource chained after an FTPSource is walked when ftp fails mid-way through the data directory
+MOCK FAIL RULE: ftp://ftp.crosswire.org/pub/sword/raw/modules/gbsreference/gbsreference.dat* -> -9
+MOCK ftp GET ftp://ftp.crosswire.org/pub/sword/raw/packages/GBSReference.zip -> -4 (timeout=10000)
+MOCK http GET https://crosswire.org/ftpmirror/pub/sword/raw/packages/GBSReference.zip -> -5 (timeout=10000)
+MOCK ftp LIST ftp://ftp.crosswire.org/pub/sword/raw/modules/gbsreference/ -> 3 entries
+MOCK ftp GET ftp://ftp.crosswire.org/pub/sword/raw/modules/gbsreference/gbsreference.bdt -> 0 (timeout=10000)
+MOCK ftp GET ftp://ftp.crosswire.org/pub/sword/raw/modules/gbsreference/gbsreference.dat -> -9 (timeout=10000)
+MOCK http LIST https://crosswire.org/ftpmirror/pub/sword/raw/modules/gbsreference/ -> 3 entries
+MOCK http GET https://crosswire.org/ftpmirror/pub/sword/raw/modules/gbsreference/gbsreference.bdt -> 0 (timeout=10000)
+MOCK http GET https://crosswire.org/ftpmirror/pub/sword/raw/modules/gbsreference/gbsreference.dat -> 0 (timeout=10000)
+MOCK http GET https://crosswire.org/ftpmirror/pub/sword/raw/modules/gbsreference/gbsreference.idx -> 0 (timeout=10000)
+installModule(CrossWire, GBSReference): OK (0)
+Installed Modules:
+	[GBSReference] (1.0) - GBS Reference Test Module
+	1 modules
+	[GBSReference] InstallSourceID=20081216195754 InstallSourceCaption=CrossWire
+
+== everything down: install fails and nothing is left behind
+MOCK FAIL RULE: https://* -> -2
+MOCK FAIL RULE: ftp://* -> -2
+MOCK http GET https://crosswire.org/ftpmirror/pub/sword/raw/packages/GBSReference.zip -> -2 (timeout=10000)
+MOCK ftp GET ftp://ftp.crosswire.org/pub/sword/raw/packages/GBSReference.zip -> -2 (timeout=10000)
+MOCK ftp LIST ftp://ftp.crosswire.org/pub/sword/raw/modules/gbsreference/ -> -2
+installModule(CrossWire, GBSReference): FAILED (-1009)
+Installed Modules:
+	0 modules
+dest files:
+
+== user cancels: nothing else is tried
+MOCK FAIL RULE: https://* -> -1
+MOCK http GET https://crosswire.org/ftpmirror/pub/sword/raw/packages/GBSReference.zip -> -1 (timeout=10000)
+installModule(CrossWire, GBSReference): FAILED (-1)
+Installed Modules:
+	0 modules
+
+== install from ftp-only source
+MOCK ftp GET ftp://ftp.crosswire.org/pub/sword/betaraw/packages/GBSSecond.zip -> -4 (timeout=10000)
+MOCK ftp LIST ftp://ftp.crosswire.org/pub/sword/betaraw/modules/gbssecond/ -> 3 entries
+MOCK ftp GET ftp://ftp.crosswire.org/pub/sword/betaraw/modules/gbssecond/gbssecond.bdt -> 0 (timeout=10000)
+MOCK ftp GET ftp://ftp.crosswire.org/pub/sword/betaraw/modules/gbssecond/gbssecond.dat -> 0 (timeout=10000)
+MOCK ftp GET ftp://ftp.crosswire.org/pub/sword/betaraw/modules/gbssecond/gbssecond.idx -> 0 (timeout=10000)
+installModule(CrossWire Beta, GBSSecond): OK (0)
+Installed Modules:
+	[GBSSecond] (2.1) - Second Test Module
+	1 modules
+	[GBSSecond] InstallSourceID=20090224125400 InstallSourceCaption=CrossWire Beta
+dest files:
+	./mods.d/gbssecond.conf
+	./modules/gbssecond/gbssecond.bdt
+	./modules/gbssecond/gbssecond.dat
+	./modules/gbssecond/gbssecond.idx
+
+== install a module the source does not have
+Remote source [CrossWire] does not make available module [NoSuchModule]
+
+== upgrade: a shorter .conf upstream must replace the installed one exactly
+MOCK http GET https://crosswire.org/ftpmirror/pub/sword/raw/packages/GBSReference.zip -> -5 (timeout=10000)
+MOCK ftp GET ftp://ftp.crosswire.org/pub/sword/raw/packages/GBSReference.zip -> -4 (timeout=10000)
+MOCK ftp LIST ftp://ftp.crosswire.org/pub/sword/raw/modules/gbsreference/ -> 3 entries
+MOCK ftp GET ftp://ftp.crosswire.org/pub/sword/raw/modules/gbsreference/gbsreference.bdt -> 0 (timeout=10000)
+MOCK ftp GET ftp://ftp.crosswire.org/pub/sword/raw/modules/gbsreference/gbsreference.dat -> 0 (timeout=10000)
+MOCK ftp GET ftp://ftp.crosswire.org/pub/sword/raw/modules/gbsreference/gbsreference.idx -> 0 (timeout=10000)
+installModule(CrossWire, GBSReference): OK (0)
+Installed Modules:
+	[GBSReference] (1.1) - Short
+	[GBSSecond] (2.1) - Second Test Module
+	2 modules
+	[GBSReference] InstallSourceID=20081216195754 InstallSourceCaption=CrossWire
+	[GBSSecond] InstallSourceID=20090224125400 InstallSourceCaption=CrossWire Beta
+installed conf:
+
+[GBSReference]
+DataPath=./modules/gbsreference/gbsreference
+ModDrv=RawGenBook
+Version=1.1
+Description=Short
+

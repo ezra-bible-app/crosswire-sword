@@ -1,0 +1,137 @@
+== refresh: https archive
+MOCK http GET https://crosswire.org/ftpmirror/pub/sword/raw/mods.d.tar.gz -> 0 (timeout=10000)
+refreshRemoteSource(CrossWire): OK (0)
+Available Modules from [CrossWire]:
+	[GBSReference] (1.0) - GBS Reference Test Module
+	[GBSSecond] (2.1) - Second Test Module
+	2 modules
+shadow [20220529224400] mods.d:
+	gbsreference.conf
+	gbssecond.conf
+	globals.conf
+	modules-conf.cache
+shadow [20081216195754] mods.d:
+	gbsreference.conf
+	gbssecond.conf
+	globals.conf
+
+== refresh: https down, ftp archive
+MOCK FAIL RULE: https://* -> -2
+MOCK http GET https://crosswire.org/ftpmirror/pub/sword/raw/mods.d.tar.gz -> -2 (timeout=10000)
+MOCK ftp GET ftp://ftp.crosswire.org/pub/sword/raw/mods.d.tar.gz -> 0 (timeout=10000)
+refreshRemoteSource(CrossWire): OK (0)
+Available Modules from [CrossWire]:
+	[GBSReference] (1.0) - GBS Reference Test Module
+	[GBSSecond] (2.1) - Second Test Module
+	2 modules
+shadow [20220529224400] mods.d:
+	gbsreference.conf
+	gbssecond.conf
+	globals.conf
+	modules-conf.cache
+shadow [20081216195754] mods.d:
+	gbsreference.conf
+	gbssecond.conf
+	globals.conf
+
+== refresh: https down, ftp has no archive; ftp directory copy
+MOCK FAIL RULE: https://* -> -2
+MOCK http GET https://crosswire.org/ftpmirror/pub/sword/raw/mods.d.tar.gz -> -2 (timeout=10000)
+MOCK ftp GET ftp://ftp.crosswire.org/pub/sword/raw/mods.d.tar.gz -> -4 (timeout=10000)
+MOCK ftp LIST ftp://ftp.crosswire.org/pub/sword/raw/mods.d/ -> 2 entries
+MOCK ftp GET ftp://ftp.crosswire.org/pub/sword/raw/mods.d/gbsreference.conf -> 0 (timeout=10000)
+MOCK ftp GET ftp://ftp.crosswire.org/pub/sword/raw/mods.d/gbssecond.conf -> 0 (timeout=10000)
+refreshRemoteSource(CrossWire): OK (0)
+Available Modules from [CrossWire]:
+	[GBSReference] (1.0) - GBS Reference Test Module
+	[GBSSecond] (2.1) - Second Test Module
+	2 modules
+shadow [20220529224400] mods.d:
+	gbsreference.conf
+	gbssecond.conf
+	globals.conf
+	modules-conf.cache
+shadow [20081216195754] mods.d:
+	gbsreference.conf
+	gbssecond.conf
+	globals.conf
+
+== refresh: https serves a bogus archive (e.g., captive portal); the PackagePreference is never walked, ftp is used
+MOCK http GET https://crosswire.org/ftpmirror/pub/sword/raw/mods.d.tar.gz -> 0 (timeout=10000)
+MOCK ftp GET ftp://ftp.crosswire.org/pub/sword/raw/mods.d.tar.gz -> -4 (timeout=10000)
+MOCK ftp LIST ftp://ftp.crosswire.org/pub/sword/raw/mods.d/ -> 2 entries
+MOCK ftp GET ftp://ftp.crosswire.org/pub/sword/raw/mods.d/gbsreference.conf -> 0 (timeout=10000)
+MOCK ftp GET ftp://ftp.crosswire.org/pub/sword/raw/mods.d/gbssecond.conf -> 0 (timeout=10000)
+refreshRemoteSource(CrossWire): OK (0)
+Available Modules from [CrossWire]:
+	[GBSReference] (1.0) - GBS Reference Test Module
+	[GBSSecond] (2.1) - Second Test Module
+	2 modules
+
+== refresh: everything down; fails, and no stale module list survives
+MOCK FAIL RULE: https://* -> -2
+MOCK FAIL RULE: ftp://* -> -2
+MOCK http GET https://crosswire.org/ftpmirror/pub/sword/raw/mods.d.tar.gz -> -2 (timeout=10000)
+MOCK ftp GET ftp://ftp.crosswire.org/pub/sword/raw/mods.d.tar.gz -> -2 (timeout=10000)
+refreshRemoteSource(CrossWire): FAILED (-1002)
+Available Modules from [CrossWire]:
+	0 modules
+shadow [20220529224400] mods.d:
+	globals.conf
+	modules-conf.cache
+shadow [20081216195754] mods.d:
+	globals.conf
+
+== refresh: user cancels during https (nothing else is tried)
+MOCK FAIL RULE: https://* -> -1
+MOCK http GET https://crosswire.org/ftpmirror/pub/sword/raw/mods.d.tar.gz -> -1 (timeout=10000)
+refreshRemoteSource(CrossWire): FAILED (-1)
+
+== refresh: module removed upstream is gone after refresh (no stale shadow)
+MOCK http GET https://crosswire.org/ftpmirror/pub/sword/raw/mods.d.tar.gz -> 0 (timeout=10000)
+refreshRemoteSource(CrossWire): OK (0)
+Available Modules from [CrossWire]:
+	[GBSReference] (1.0) - GBS Reference Test Module
+	1 modules
+shadow [20220529224400] mods.d:
+	gbsreference.conf
+	globals.conf
+	modules-conf.cache
+shadow [20081216195754] mods.d:
+	gbsreference.conf
+	globals.conf
+
+== refresh within one process flushes the cached module list of the head source
+Available Modules from [CrossWire]:
+	[GBSReference] (1.0) - GBS Reference Test Module
+	1 modules
+MOCK http GET https://crosswire.org/ftpmirror/pub/sword/raw/mods.d.tar.gz -> 0 (timeout=10000)
+refreshRemoteSource(CrossWire): OK (0)
+Available Modules from [CrossWire]:
+	[GBSReference] (1.0) - GBS Reference Test Module
+	[GBSSecond] (2.1) - Second Test Module
+	2 modules
+
+== ftp-only source: archive, then directory copy when there is no archive
+MOCK ftp GET ftp://ftp.crosswire.org/pub/sword/betaraw/mods.d.tar.gz -> 0 (timeout=10000)
+refreshRemoteSource(CrossWire Beta): OK (0)
+Available Modules from [CrossWire Beta]:
+	[GBSReference] (1.0) - GBS Reference Test Module
+	[GBSSecond] (2.1) - Second Test Module
+	2 modules
+MOCK ftp GET ftp://ftp.crosswire.org/pub/sword/betaraw/mods.d.tar.gz -> -4 (timeout=10000)
+MOCK ftp LIST ftp://ftp.crosswire.org/pub/sword/betaraw/mods.d/ -> 2 entries
+MOCK ftp GET ftp://ftp.crosswire.org/pub/sword/betaraw/mods.d/gbsreference.conf -> 0 (timeout=10000)
+MOCK ftp GET ftp://ftp.crosswire.org/pub/sword/betaraw/mods.d/gbssecond.conf -> 0 (timeout=10000)
+refreshRemoteSource(CrossWire Beta): OK (0)
+Available Modules from [CrossWire Beta]:
+	[GBSReference] (1.0) - GBS Reference Test Module
+	[GBSSecond] (2.1) - Second Test Module
+	2 modules
+
+== source with no reachable host
+MOCK ftp GET ftp://ftp.elsewhere.org/pub/sword/mods.d.tar.gz -> -4 (timeout=10000)
+MOCK ftp LIST ftp://ftp.elsewhere.org/pub/sword/mods.d/ -> -4
+refreshRemoteSource(Elsewhere): FAILED (-1009)
+Available Modules from [Elsewhere]:
+	0 modules

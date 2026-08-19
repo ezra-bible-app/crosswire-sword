@@ -22,3 +22,12 @@ When all is running fine, output your .good file with:
 
 That's it.  Simple right?  :)  So make more unit tests!
 
+===================================
+
+The installmgr_*.sh tests exercise InstallMgr (remote source sync, refresh,
+install, and the mods.d module config cache) without any network access:
+they source installmgr_fixture.sh, which builds a small "remote repository"
+under tmp/<test>/fixture/, and drive ../installmgrtest, which replaces the
+ftp/http transports with a mock that serves that directory (see the header
+of ../installmgrtest.cpp for its options).  installmgr_fixture.sh is not a
+test itself (it has no .good file).

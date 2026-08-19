@@ -1,0 +1,56 @@
+== install a module; listing the library creates the cache
+Installed Modules:
+	[GBSReference] (1.0) - GBS Reference Test Module
+	1 modules
+	[GBSReference] InstallSourceID=20081216195754 InstallSourceCaption=CrossWire
+cache exists
+
+== installing another module through InstallMgr updates the list
+Installed Modules:
+	[GBSReference] (1.0) - GBS Reference Test Module
+	[GBSSecond] (2.1) - Second Test Module
+	2 modules
+	[GBSReference] InstallSourceID=20081216195754 InstallSourceCaption=CrossWire
+	[GBSSecond] InstallSourceID=20081216195754 InstallSourceCaption=CrossWire
+
+== uninstalling through InstallMgr updates the list
+Installed Modules:
+	[GBSReference] (1.0) - GBS Reference Test Module
+	1 modules
+	[GBSReference] InstallSourceID=20081216195754 InstallSourceCaption=CrossWire
+
+== a .conf and module dropped in by someone else show up
+Installed Modules:
+	[GBSReference] (1.0) - GBS Reference Test Module
+	[GBSSecond] (2.1) - Second Test Module
+	2 modules
+	[GBSReference] InstallSourceID=20081216195754 InstallSourceCaption=CrossWire
+	[GBSSecond] InstallSourceID= InstallSourceCaption=
+
+== a .conf edited in place by someone else (e.g., a cipher key added) is seen
+Installed Modules:
+	[GBSReference] (1.7) - GBS Reference Test Module
+	[GBSSecond] (2.1) - Second Test Module
+	2 modules
+	[GBSReference] InstallSourceID=20081216195754 InstallSourceCaption=CrossWire
+	[GBSSecond] InstallSourceID= InstallSourceCaption=
+
+== a .conf removed by someone else is gone
+Installed Modules:
+	[GBSReference] (1.7) - GBS Reference Test Module
+	1 modules
+	[GBSReference] InstallSourceID=20081216195754 InstallSourceCaption=CrossWire
+
+== removing the cache by hand is always safe
+Installed Modules:
+	[GBSReference] (1.7) - GBS Reference Test Module
+	1 modules
+	[GBSReference] InstallSourceID=20081216195754 InstallSourceCaption=CrossWire
+cache exists
+
+== a remote source shadow: modules removed upstream do not linger in a stale cache
+MOCK http GET https://crosswire.org/ftpmirror/pub/sword/raw/mods.d.tar.gz -> 0 (timeout=10000)
+refreshRemoteSource(CrossWire): OK (0)
+Available Modules from [CrossWire]:
+	[GBSReference] (1.0) - GBS Reference Test Module
+	1 modules
