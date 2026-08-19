@@ -392,8 +392,8 @@ bool checkTrans(const UnicodeString& ID, UErrorCode &status)
 			std::cout << "status " << u_errorName(status) << std::endl;
 			std::cout << "Parse error: line " << parseError.line << std::endl;
 			std::cout << "Parse error: offset " << parseError.offset << std::endl;
-			std::cout << "Parse error: preContext " << *parseError.preContext << std::endl;
-			std::cout << "Parse error: postContext " << *parseError.postContext << std::endl;
+			std::cout << "Parse error: preContext " << (int)*parseError.preContext << std::endl;
+			std::cout << "Parse error: postContext " << (int)*parseError.postContext << std::endl;
 			std::cout << "rules were" << std::endl;
 			std::cout << rules << std::endl;
 			return false;
@@ -464,8 +464,8 @@ Transliterator * instantiateTrans(const UnicodeString& ID, const UnicodeString& 
 		std::cout << "status " << u_errorName(status) << std::endl;
 		std::cout << "Parse error: line " << parseError.line << std::endl;
 		std::cout << "Parse error: offset " << parseError.offset << std::endl;
-		std::cout << "Parse error: preContext " << *parseError.preContext << std::endl;
-		std::cout << "Parse error: postContext " << *parseError.postContext << std::endl;
+		std::cout << "Parse error: preContext " << (int)*parseError.preContext << std::endl;
+		std::cout << "Parse error: postContext " << (int)*parseError.postContext << std::endl;
 		std::cout << "rules were" << std::endl;
 		std::cout << rules << std::endl;
 		return NULL;
