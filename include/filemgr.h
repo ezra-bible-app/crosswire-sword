@@ -177,7 +177,13 @@ public:
 
 	static char isDirectory(const char *path);
 	static long getFileSize(const char *path);
+	/** last modification time of a file, in seconds since the epoch; 0 if unknown
+	 */
+	static long getFileModTime(const char *path);
 	static int createParent(const char *pName);
+	/** creates (or truncates, if it exists) a file for writing, creating any missing parent directories
+	 * @return fd; < 0 = error
+	 */
 	static int createPathAndFile(const char *fName);
 
 	/** attempts to open a file readonly

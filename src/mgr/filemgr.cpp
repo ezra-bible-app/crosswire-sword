@@ -390,6 +390,8 @@ std::vector<struct DirEntry> FileMgr::getDirList(const char *dirPath, bool inclu
 			if ((strcmp(ent->d_name, ".")) && (strcmp(ent->d_name, ".."))) {
 				struct DirEntry i;
 				i.name = ent->d_name;
+				i.size = 0;
+				i.isDirectory = false;
 				if (includeIsDirectory || includeSize) i.isDirectory = FileMgr::isDirectory(basePath + ent->d_name);
 				if (!i.isDirectory && includeSize) i.size = FileMgr::getFileSize(basePath + ent->d_name);
 				dirList.push_back(i);
@@ -410,6 +412,7 @@ std::vector<struct DirEntry> FileMgr::getDirList(const char *dirPath, bool inclu
 			if (dirEntName != "." && dirEntName != "..") {
 				struct DirEntry i;
 				i.name = dirEntName;
+				i.size = 0;
 				i.isDirectory = fileData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY;
 				if (!i.isDirectory && includeSize) i.size = FileMgr::getFileSize(basePath + i.name);
 				dirList.push_back(i);
@@ -476,13 +479,17 @@ int FileMgr::openFileReadOnly(const char *fName) {
 }
 
 
+// creates (or truncates, if it exists) a file for writing, creating any
+// missing parent directories.  All callers use this to write a fresh file
+// (downloads, copies, archive extraction), so an existing file must be
+// truncated or a shorter new file would leave stale bytes at the end.
 int FileMgr::createPathAndFile(const char *fName) {
 	int fd;
 
-	fd = openFile(fName, O_CREAT|O_WRONLY|O_BINARY, S_IREAD|S_IWRITE|S_IRGRP|S_IROTH);
+	fd = openFile(fName, O_CREAT|O_WRONLY|O_TRUNC|O_BINARY, S_IREAD|S_IWRITE|S_IRGRP|S_IROTH);
 	if (fd < 1) {
 		createParent(fName);
-		fd = openFile(fName, O_CREAT|O_WRONLY|O_BINARY, S_IREAD|S_IWRITE|S_IRGRP|S_IROTH);
+		fd = openFile(fName, O_CREAT|O_WRONLY|O_TRUNC|O_BINARY, S_IREAD|S_IWRITE|S_IRGRP|S_IROTH);
 	}
 	return fd;
 }
@@ -499,11 +506,14 @@ int FileMgr::copyFile(const char *sourceFile, const char *targetFile) {
 
 	if ((sfd = openFile(sourceFile, O_RDONLY|O_BINARY, S_IREAD|S_IWRITE|S_IRGRP|S_IROTH)) < 1)
 		return -1;
-	if ((dfd = createPathAndFile(targetFile)) < 1)
+	if ((dfd = createPathAndFile(targetFile)) < 1) {
+		::close(sfd);
 		return -1;
+	}
 
 	do {
 		len = (int)read(sfd, buf, 4096);
+		if (len < 1) break;
 		if (write(dfd, buf, len) != len) break;
 	}
 	while(len == 4096);
@@ -638,6 +648,19 @@ long FileMgr::getFileSize(const char *path) {
 #endif
 	if (error) return 0;
 	return stats.st_size;
+}
+
+
+long FileMgr::getFileModTime(const char *path) {
+#ifndef WIN32
+	struct stat stats;
+	int error = stat(path, &stats);
+#else
+	struct _stat stats;
+	int error = _wstat((const wchar_t *)utf8ToWChar(path).getRawData(), &stats);
+#endif
+	if (error) return 0;
+	return (long)stats.st_mtime;
 }
 
 
