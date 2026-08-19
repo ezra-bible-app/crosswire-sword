@@ -66,6 +66,7 @@ RemoteTransport::RemoteTransport(const char *host, StatusReporter *statusReporte
 	p = "installmgr@user.com";
 	term = false;
 	passive = true;
+	timeoutMillis = 10000;
 	unverifiedPeerAllowed = true;
 }
 
@@ -134,8 +135,8 @@ SWLOGD("getDirList: got item %s\n", name.c_str());
 }
 
 
-/** network copy recursively a remote directly
- * @return error status 0: OK; -1: operation error, -2: connection error; -3: user requested termination
+/** network copy recursively a remote directory
+ * @return 0 success; -1 user requested termination; < -1 some kind of problem (see getURL)
  */
 int RemoteTransport::copyDirectory(const char *urlPrefix, const char *dir, const char *dest, const char *suffix) {
 SWLOGD("RemoteTransport::copyDirectory");
@@ -150,7 +151,7 @@ SWLOGD("NetTransport: getting dir %s\n", url.c_str());
 
 	if (!dirList.size()) {
 		SWLog::getSystemLog()->logWarning("NetTransport: failed to read dir %s\n", url.c_str());
-		return -1;
+		return (term) ? -1 : -9;
 	}
 
 	// append files in sub directories and calculate total download size
@@ -208,7 +209,7 @@ SWLOGD("NetTransport: getting dir %s\n", url.c_str());
 			}
 			SWCATCH (...) {}
 			if (term) {
-				retVal = -3;
+				retVal = -1;
 				break;
 			}
 		}

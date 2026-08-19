@@ -212,7 +212,7 @@ SWLOGD("***** Finished performing curl easy action. \n");
 				retVal = -1;
 			}
 			else {
-				retVal = -9;
+				retVal = (signed char)(-10 - (int)res);	// any other libcurl error, still < -1
 			}
 		}
 	}
