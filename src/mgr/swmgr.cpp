@@ -753,6 +753,21 @@ void SWMgr::loadConfigDir(const char *ipath, bool skipCache)
 	newModFile = basePath + "modules-conf.cache";
 	skipCache = skipCache || !FileMgr::existsFile(newModFile.c_str());
 
+	// The cache is only a speedup; it is always safe to throw it away.
+	// If anything in mods.d looks newer than the cache (a .conf added,
+	// removed, or edited by us or by anyone else), wipe it and rebuild.
+	if (!skipCache) {
+		long cacheTime = FileMgr::getFileModTime(newModFile.c_str());
+		if (FileMgr::getFileModTime(ipath) > cacheTime) skipCache = true;
+		else {
+			std::vector<DirEntry> dirList = FileMgr::getDirList(ipath, false, false);
+			for (unsigned int i = 0; i < dirList.size() && !skipCache; ++i) {
+				if (!dirList[i].name.endsWith(".conf")) continue;
+				if (FileMgr::getFileModTime((basePath + dirList[i].name).c_str()) > cacheTime) skipCache = true;
+			}
+		}
+	}
+
 	if (skipCache) {
 		// assure any cache file is removed
 		FileMgr::removeFile(newModFile.c_str());
