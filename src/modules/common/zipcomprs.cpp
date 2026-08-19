@@ -98,6 +98,20 @@ int getoct(char *p, int width) {
 }
 
 
+/* verify the checksum of a tar header block so we notice when what we
+ * were handed is not actually a tar archive (e.g., an html error page)
+ */
+bool validTarHeader(union tar_buffer &buffer) {
+	unsigned int sum = 0;
+	for (int i = 0; i < BLOCKSIZE; ++i) {
+		// the checksum is computed with the chksum field itself taken as spaces
+		if (i >= 148 && i < 156) sum += ' ';
+		else sum += (unsigned char)buffer.buffer[i];
+	}
+	return sum == (unsigned int)getoct(buffer.header.chksum, 8);
+}
+
+
 int untar(gzFile in, const char *dest) {
 	union  tar_buffer buffer;
 	int    len;
@@ -105,19 +119,26 @@ int untar(gzFile in, const char *dest) {
 	int    getheader = 1;
 	int    remaining = 0;
 	int    outFD = 0;
+	int    retVal = 0;
 	sword::SWBuf  fname;
 	time_t tartime;
 
 	while (1) {
 		len = gzread(in, &buffer, BLOCKSIZE);
-		if (len < 0)
+		if (len < 0) {
 			sword::SWLog::getSystemLog()->logError(gzerror(in, &err));
+			retVal = -1;
+			break;
+		}
 		/*
 		* Always expect complete blocks to process
 		* the tar information.
 		*/
-		if (len != BLOCKSIZE)
+		if (len != BLOCKSIZE) {
 			sword::SWLog::getSystemLog()->logError("gzread: incomplete block read");
+			if (len) retVal = -1;
+			break;
+		}
 
 		/*
 		* If we have to get a tar header
@@ -130,10 +151,26 @@ int untar(gzFile in, const char *dest) {
 			*/
 			if ((len == 0)  || (buffer.header.name[0]== 0)) break;
 
+			if (!validTarHeader(buffer)) {
+				sword::SWLog::getSystemLog()->logError("untar: invalid tar header; not a tar archive?");
+				retVal = -2;
+				break;
+			}
+
 			tartime = (time_t)getoct(buffer.header.mtime,12);
 			fname = dest;
 			if (!fname.endsWith("/") && !fname.endsWith("\\")) fname += '/';
 			fname += buffer.header.name;
+
+			// don't let an archive write outside of dest
+			sword::SWBuf entryName = buffer.header.name;
+			if (entryName == ".." || entryName.startsWith("../") || entryName.endsWith("/..") || strstr(entryName.c_str(), "/../")) {
+				sword::SWLog::getSystemLog()->logError("untar: skipping suspicious entry %s", buffer.header.name);
+				remaining = getoct(buffer.header.size,12);
+				getheader = (remaining) ? 0 : 1;
+				outFD = 0;
+				continue;
+			}
 
 			switch (buffer.header.typeflag) {
 			case DIRTYPE: {
@@ -212,7 +249,8 @@ int untar(gzFile in, const char *dest) {
 			}
 		}
 	}
-	return 0;
+	if (outFD > 0) sword::FileMgr::closeFile(outFD);
+	return retVal;
 }
 
 }  // end anon namespace
