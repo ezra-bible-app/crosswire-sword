@@ -231,6 +231,7 @@ void initConfig() {
 	bool allowed = isUnverifiedPeerAllowed();
 
 	createBasicConfig(enable, true, allowed);
+	installMgr->readInstallConf();	// so any commands which follow in this run use the new config
 
 	cout << "\n\nInitialized basic config file at [" << confPath << "]\n";
 	cout << "with remote source features " << ((enable) ? "ENABLED" : "DISABLED") << "\n";
@@ -285,6 +286,13 @@ void listRemoteSources(bool namesOnly = false) {
 			cout << "\tType     : " << it->second->type << "\n";
 			cout << "\tSource   : " << it->second->source << "\n";
 			cout << "\tDirectory: " << it->second->directory << "\n";
+			// sources which share a caption are chained and tried in order
+			for (InstallSource *is = it->second->chainedSource; is; is = is->chainedSource) {
+				cout << "\t  falls back to:\n";
+				cout << "\t  Type     : " << is->type << "\n";
+				cout << "\t  Source   : " << is->source << "\n";
+				cout << "\t  Directory: " << is->directory << "\n";
+			}
 		}
 	}
 }
@@ -298,9 +306,12 @@ void refreshRemoteSource(const char *sourceName) {
 		finish(-3);
 	}
 
-	if (!installMgr->refreshRemoteSource(source->second))
+	int error = installMgr->refreshRemoteSource(source->second);
+	if (!error)
 		cout << "\nRemote Source Refreshed\n";
-	else	cerr << "\nError Refreshing Remote Source\n";
+	else if (error == -1)
+		cerr << "\nRefresh cancelled\n";
+	else	cerr << "\nError Refreshing Remote Source (" << error << ")\n";
 }
 
 
@@ -393,8 +404,11 @@ void remoteInstallModule(const char *sourceName, const char *modName) {
 	}
 
 	int error = installMgr->installModule(mgr, 0, module->getName(), is);
-	if (error) {
-		cout << "\nError installing module: [" << module->getName() << "] (write permissions?)\n";
+	if (error == -1) {
+		cout << "\nInstall cancelled: [" << module->getName() << "]\n";
+	}
+	else if (error) {
+		cout << "\nError installing module: [" << module->getName() << "] (" << error << ")\n";
 	} else cout << "\nInstalled module: [" << module->getName() << "]\n";
 }
 
@@ -409,7 +423,7 @@ void localDirInstallModule(const char *dir, const char *modName) {
 	}
 	int error = installMgr->installModule(mgr, dir, module->getName());
 	if (error) {
-		cout << "\nError installing module: [" << module->getName() << "] (write permissions?)\n";
+		cout << "\nError installing module: [" << module->getName() << "] (" << error << "; write permissions?)\n";
 	} else cout << "\nInstalled module: [" << module->getName() << "]\n";
 }
 

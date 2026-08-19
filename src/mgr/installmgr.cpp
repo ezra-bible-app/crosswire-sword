@@ -66,6 +66,9 @@ namespace {
 }
 
 
+const int InstallMgr::REMOTE_ERROR_BASE   = -1000;
+const int InstallMgr::COPYDIR_ERROR_BASE  = -2000;
+const int InstallMgr::COPYFILE_ERROR_BASE = -3000;
 const unsigned int InstallMgr::MODSTAT_OLDER            = 0x001;
 const unsigned int InstallMgr::MODSTAT_SAMEVERSION      = 0x002;
 const unsigned int InstallMgr::MODSTAT_UPDATED          = 0x004;
@@ -355,8 +358,7 @@ SWLOGD("remoteCopy: %s, %s, %s, %c, %s", (is?is->source.c_str():"null"), src, (d
 		) {
 
 		trans = createFTPTransport(is->source, statusReporter);
-		trans->setPassive(passive);
-		trans->setTimeoutMillis(timeoutMillis);
+		if (trans) trans->setPassive(passive);
 	}
 	else if (is->type == "HTTP" || is->type == "HTTPS") {
 		trans = createHTTPTransport(is->source, statusReporter);
@@ -365,6 +367,7 @@ SWLOGD("remoteCopy: %s, %s, %s, %c, %s", (is?is->source.c_str():"null"), src, (d
 	// if no transport, then requested transport not available
 	if (!trans) return -9;
 
+	trans->setTimeoutMillis(timeoutMillis);
 
 	transport = trans; // set classwide current transport for other thread terminate() call
 	if (is->u.length()) {
@@ -459,10 +462,13 @@ SWLOGD("***** fromLocation: %s \n", fromLocation);
 	}
 SWLOGD("***** modName: %s \n", modName);
 
-	InstallSource *packagePreference = 0;
+	// {is} may be the head of a chain of sources which all offer the same
+	// content by different means (e.g., an HTTPS PackagePreference chained
+	// to a traditional FTP source).  We attempt each in chain order.
+	InstallSource *chainHead = is;
 	if (is) {
+		// record the source under its traditional (non package preference) identity
 		if (is->packagePreference && is->chainedSource) {
-			packagePreference = is;
 			is = is->chainedSource;
 		}
 		sourceDir = (SWBuf)privatePath + "/" + is->uid;
@@ -521,9 +527,11 @@ SWLOGD("***** modName: %s \n", modName);
 			if (is) {
 				while (fileBegin != fileEnd) {	// netCopy each file first
 					buffer = sourceDir + fileBegin->second.c_str();
-					if (remoteCopy(is, fileBegin->second.c_str(), buffer.c_str())) {
+					int errorCode = remoteCopy(is, fileBegin->second.c_str(), buffer.c_str());
+					if (errorCode) {
 						aborted = true;
-						break;	// user aborted
+						retVal = (errorCode == -1) ? -1 : REMOTE_ERROR_BASE + errorCode;
+						break;
 					}
 					fileBegin++;
 				}
@@ -539,7 +547,8 @@ SWLOGD("***** modName: %s \n", modName);
 					removeTrailingSlash(dest);
 					dest += '/';
 					dest += fileBegin->second.c_str();
-					retVal = FileMgr::copyFile(sourcePath.c_str(), dest.c_str());
+					int errorCode = FileMgr::copyFile(sourcePath.c_str(), dest.c_str());
+					if (errorCode) retVal = COPYFILE_ERROR_BASE + errorCode;
 
 					fileBegin++;
 				}
@@ -579,16 +588,11 @@ SWLOGD("***** modName: %s \n", modName);
 SWLOGD("***** installModule: trying to get archive cache: %s \n", relativeArchivePath.c_str());
 				int errorCode = -999;
 				
-				// first see if we have a packagePreference
-				if (packagePreference) {
-					errorCode = remoteCopy(packagePreference, relativeArchivePath.c_str(), absoluteArchivePath.c_str(), false);
-					if (errorCode == -1) aborted = true;	// user aborted
-				}
-				
-				// if we just tried a packagePreference source, then skip on to our chained source and try again
-				if (errorCode && !aborted) {
-					errorCode = remoteCopy(is, relativeArchivePath.c_str(), absoluteArchivePath.c_str(), false);
-					if (errorCode == -1) aborted = true;	// user aborted
+#ifndef EXCLUDEZLIB
+				// try each source in our chain for a single archive
+				for (InstallSource *src = chainHead; src && errorCode && !aborted; src = src->chainedSource) {
+					errorCode = remoteCopy(src, relativeArchivePath.c_str(), absoluteArchivePath.c_str(), false);
+					if (errorCode == -1) { aborted = true; retVal = -1; }	// user aborted
 				}
 
 				if (!errorCode) {
@@ -603,6 +607,7 @@ SWLOGD("***** installModule: trying to get archive cache: %s \n", relativeArchiv
 					FileMgr::removeFile(absoluteArchivePath.c_str());
 					
 				}
+#endif
 
 				//
 				// No single archive exists so we'll continue
@@ -615,14 +620,23 @@ SWLOGD("***** destMgr->prefixPath: %s \n", destMgr->prefixPath);
 SWLOGD("***** absolutePath: %s \n", absolutePath.c_str());
 SWLOGD("***** relativePath: %s \n", relativePath.c_str());
 
-				while (errorCode && !aborted && absolutePath.length() && relativePath.length()) {
-					errorCode = remoteCopy(is, relativePath.c_str(), absolutePath.c_str(), true);
-					if (errorCode == -1) aborted = true;	// user aborted
-					// if we have another transport method to try for the source, let's try
-					if (is->chainedSource) is = is->chainedSource;
-					else break;
+				if (absolutePath.length() && relativePath.length()) {
+					// try each source in our chain.  A packagePreference source
+					// is only used for single file downloads (packages), never
+					// walked: there is no reliable way to list a directory across
+					// the various http servers, and a partial listing would look
+					// like success and leave a broken module.
+					for (InstallSource *src = chainHead; src && errorCode && !aborted; src = src->chainedSource) {
+						if (src->packagePreference) continue;
+						errorCode = remoteCopy(src, relativePath.c_str(), absolutePath.c_str(), true);
+						if (errorCode == -1) { aborted = true; retVal = -1; }	// user aborted
+					}
 				}
-				if (errorCode) aborted = true; // we've failed to transfer to the module
+				if (errorCode && !aborted) {
+					// we've failed to transfer the module; report the last transport error
+					aborted = true;
+					retVal = REMOTE_ERROR_BASE + errorCode;
+				}
 			}
 		}
 
@@ -630,7 +644,8 @@ SWLOGD("***** relativePath: %s \n", relativePath.c_str());
 		if (!aborted) {
 			// copy the tmp netCopied files (or local files) to real destination
 			SWBuf destPath = (SWBuf)destMgr->prefixPath + relativePath;
-			retVal = FileMgr::copyDir(absolutePath.c_str(), destPath.c_str());
+			int errorCode = FileMgr::copyDir(absolutePath.c_str(), destPath.c_str());
+			if (errorCode) retVal = COPYDIR_ERROR_BASE + errorCode;
 
 			if (is) {		// delete tmp netCopied files
 //				mgr->deleteModule(modName);
@@ -649,16 +664,19 @@ SWLOGD("***** relativePath: %s \n", relativePath.c_str());
 					// we found a conf file with our module
 					if (config->getSections().find(modName) != config->getSections().end()) {
 						SWBuf targetFile = destConfRoot + dirList[i].name;
-						retVal = FileMgr::copyFile(modFile.c_str(), targetFile.c_str());
-						if (cipher) {
+						int errorCode = FileMgr::copyFile(modFile.c_str(), targetFile.c_str());
+						if (errorCode) retVal = COPYFILE_ERROR_BASE + errorCode;
+						if (cipher && !retVal) {
 							if (getCipherCode(modName, config)) {
 								SWMgr newDest(destMgr->prefixPath);
 								removeModule(&newDest, modName);
 								aborted = true;
+								retVal = -2;	// cipher key required and not provided
 							}
 							else {
 								config->save();
-								retVal = FileMgr::copyFile(modFile.c_str(), targetFile.c_str());
+								errorCode = FileMgr::copyFile(modFile.c_str(), targetFile.c_str());
+								if (errorCode) retVal = COPYFILE_ERROR_BASE + errorCode;
 							}
 						}
 						if (!forgetInstallSource) {
@@ -680,7 +698,7 @@ SWLOGD("***** relativePath: %s \n", relativePath.c_str());
 		SWBuf modCache = destConfRoot + "modules-conf.cache";
 		FileMgr::removeFile(modCache.c_str());
 
-		return (aborted) ? -9 : retVal;
+		return retVal;
 	}
 	return 1;
 }
@@ -691,52 +709,78 @@ int InstallMgr::refreshRemoteSource(InstallSource *is) {
 	// assert user disclaimer has been confirmed
 	if (!isUserDisclaimerConfirmed()) return -1;
 
-	InstallSource *packagePreference = 0;
-	SWBuf packagePreferenceRoot = "";
-	// check if we're just a packagePreference
-	if (is->packagePreference && is->chainedSource) {
-		packagePreference = is;
-		packagePreferenceRoot = (SWBuf)privatePath + (SWBuf)"/" + packagePreference->uid.c_str();
-		is = is->chainedSource;
+	// {is} may be the head of a chain of sources which all offer the same
+	// content by different means (e.g., an HTTPS PackagePreference chained
+	// to a traditional FTP source).  We try each source in chain order until
+	// one succeeds, and then make the result available in the local shadow
+	// of every source in the chain, so it doesn't matter which one a
+	// frontend or installModule uses to look up the module list.
+
+	// don't try the next attempt on user requested termination
+	bool aborted = false;
+	int errorCode = -1; //0 means successful
+
+	// clear the local shadow of every source in the chain
+	for (InstallSource *src = is; src; src = src->chainedSource) {
+		SWBuf root = (SWBuf)privatePath + (SWBuf)"/" + src->uid.c_str();
+		removeTrailingSlash(root);
+		SWBuf target = root + "/mods.d";
+		FileMgr::removeDir(target.c_str());
+		if (!FileMgr::existsDir(target)) {
+			int fd = FileMgr::createPathAndFile(target+"/globals.conf");
+			if (fd > 0) FileMgr::closeFile(fd);
+		}
 	}
+
+	// the head source's shadow is where we download; we replicate to the others below
 	SWBuf root = (SWBuf)privatePath + (SWBuf)"/" + is->uid.c_str();
 	removeTrailingSlash(root);
 	SWBuf target = root + "/mods.d";
-	int errorCode = -1; //0 means successful
 
-	FileMgr::removeDir(target.c_str());
-
-	if (!FileMgr::existsDir(target))
-		FileMgr::createPathAndFile(target+"/globals.conf");
+	for (InstallSource *src = is; src && errorCode && !aborted; src = src->chainedSource) {
 
 #ifndef EXCLUDEZLIB
-	SWBuf archive = root + "/mods.d.tar.gz";
+		SWBuf archive = root + "/mods.d.tar.gz";
 
-	// first try refreshing from the package preference
-	if (packagePreference) {
-		errorCode = remoteCopy(packagePreference, "mods.d.tar.gz", archive.c_str(), false);
-	}
-	if (errorCode) {
-		// packagePreference failed so let's move on as if we didn't have a packagePreference
-		packagePreference = 0;
-		errorCode = remoteCopy(is, "mods.d.tar.gz", archive.c_str(), false);
-	}
-	if (!errorCode) { //sucessfully downloaded the tar,gz of module configs
-		int fd = FileMgr::openFileReadOnly(archive.c_str());
-		ZipCompress::unTarGZ(fd, root.c_str());
-		FileMgr::closeFile(fd);
-		if (packagePreference) {
+		// first try to grab a single archive of the module configs
+		errorCode = remoteCopy(src, "mods.d.tar.gz", archive.c_str(), false);
+		if (errorCode == -1) { aborted = true; break; }	// user aborted
+		if (errorCode == -2) continue;			// connection error; don't bother trying more from this source
+		if (!errorCode) { //sucessfully downloaded the tar.gz of module configs
 			int fd = FileMgr::openFileReadOnly(archive.c_str());
-			ZipCompress::unTarGZ(fd, packagePreferenceRoot.c_str());
+			errorCode = ZipCompress::unTarGZ(fd, root.c_str());
 			FileMgr::closeFile(fd);
+			if (!errorCode) break;
+			// bad archive; clean up and fall through to try copying the directory
+			FileMgr::removeDir(target.c_str());
+			int gfd = FileMgr::createPathAndFile(target+"/globals.conf");
+			if (gfd > 0) FileMgr::closeFile(gfd);
 		}
-	}
-	else if (errorCode > -2)	// don't try the next attempt on connection error or user requested termination
 #endif
-	errorCode = remoteCopy(is, "mods.d", target.c_str(), true, ".conf"); //copy the whole directory
+		// no archive available; copy the whole directory of module configs.
+		// A packagePreference source is only used for single file downloads
+		// (archives), never walked: there is no reliable way to list a
+		// directory across the various http servers.
+		if (src->packagePreference) continue;
+		errorCode = remoteCopy(src, "mods.d", target.c_str(), true, ".conf");
+		if (errorCode == -1) { aborted = true; break; }	// user aborted
+	}
 
-	is->flush();
-	return errorCode;
+	// replicate the result to the local shadow of every chained source
+	// and drop any cached module list for each source in the chain
+	for (InstallSource *src = is; src; src = src->chainedSource) {
+		if (!errorCode && src != is) {
+			SWBuf srcRoot = (SWBuf)privatePath + (SWBuf)"/" + src->uid.c_str();
+			removeTrailingSlash(srcRoot);
+			SWBuf srcTarget = srcRoot + "/mods.d";
+			FileMgr::removeDir(srcTarget.c_str());
+			FileMgr::copyDir(target.c_str(), srcTarget.c_str());
+		}
+		src->flush();
+	}
+
+	if (!errorCode) return 0;
+	return (errorCode == -1) ? -1 : REMOTE_ERROR_BASE + errorCode;
 }
 
 
@@ -825,50 +869,52 @@ int InstallMgr::refreshRemoteSourceConfiguration() {
 		SectionMap::iterator sections = masterList.getSections().find("Repos");
 		if (sections != masterList.getSections().end()) {
 			for (ConfigEntMap::iterator actions = sections->second.begin(); actions != sections->second.end(); actions++) {
-				// Search through our current sources and see if we have a matching UID
-				InstallSourceMap::iterator it;
-				for (it = sources.begin(); it != sources.end(); ++it) {
-					// is this our UID?
-					if ((it->second) && (it->second->uid == actions->first)) {
-						if (actions->second == "REMOVE") {
-							// be sure to call save/reload after this
-							// or this could be dangerous
-							delete it->second;
-							it->second = 0;
-						}
-						else {
-							SWBuf key = actions->second.stripPrefix('=');
-							if (key == "FTPSource") {
-								// we might consider instantiating a temp IS
-								// from our config string and then copy only
-								// some entries.  This would allow the use to
-								// change some fields and not have them overwritten
-								// but it seems like we might want to change any
-								// of the current fields so we don't do this now
-								// InstallSource i("FTP", actions->second);
-								delete it->second;
-								it->second = new InstallSource("FTP", actions->second.c_str());
-								it->second->uid = actions->first;
-							}
-						}
-						break;
-					}
-				}
-				// didn't find our UID, let's add it
-				if (it == sources.end()) {
-					SWBuf key = actions->second.stripPrefix('=');
-					SWBuf sourceType = key;
-					if (sourceType.endsWith("Source")) sourceType.setSize(sourceType.length() - 6);
-					else if (sourceType.endsWith("PackagePreference")) sourceType.setSize(sourceType.length() - 17);
-					if (sourceType != key) {
-						if (actions->second != "REMOVE") {
-							InstallSource *is = new InstallSource(sourceType, actions->second.c_str());
-							if (key.endsWith("PackagePreference")) is->packagePreference = true;
-							is->uid = actions->first;
-							addInstallSourceToSources(sources, is->caption, is);
+				const SWBuf &uid = actions->first;
+				SWBuf confEnt = actions->second;
+				SWBuf key = confEnt.stripPrefix('=');
+				SWBuf sourceType = key;
+				bool isPackagePreference = false;
+				if (sourceType.endsWith("Source")) sourceType.setSize(sourceType.length() - 6);
+				else if (sourceType.endsWith("PackagePreference")) { sourceType.setSize(sourceType.length() - 17); isPackagePreference = true; }
+				bool remove = (actions->second == "REMOVE");
+
+				// Search through our current sources, including chained sources,
+				// and see if we have a matching UID.  If so, remove it, and
+				// we'll add the new definition below.  Note that our sources
+				// are re-chained by caption when we save and re-read our config.
+				bool found = false;
+				for (InstallSourceMap::iterator it = sources.begin(); it != sources.end() && !found; ++it) {
+					InstallSource *parent = 0;
+					for (InstallSource *src = it->second; src; parent = src, src = src->chainedSource) {
+						if (src->uid == uid) {
+							// unlink from chain and delete
+							if (parent) parent->chainedSource = src->chainedSource;
+							else it->second = src->chainedSource;
+							src->chainedSource = 0;
+							delete src;
+							found = true;
+							break;
 						}
 					}
 				}
+
+				// add the definition from the master list.  We might consider
+				// copying only some entries from the master list to allow the
+				// user to change some fields and not have them overwritten,
+				// but it seems like we might want to change any of the current
+				// fields so we don't do this now.
+				if (!remove && sourceType != key) {
+					InstallSource *is = new InstallSource(sourceType, confEnt.c_str());
+					is->packagePreference = isPackagePreference;
+					is->uid = uid;
+					addInstallSourceToSources(sources, is->caption, is);
+				}
+			}
+
+			// drop any entries left without a source
+			for (InstallSourceMap::iterator it = sources.begin(); it != sources.end();) {
+				if (!it->second) sources.erase(it++);
+				else ++it;
 			}
 
 			// persist and re-read

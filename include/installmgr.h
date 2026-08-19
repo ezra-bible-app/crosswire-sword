@@ -60,7 +60,21 @@ public:
 	SWMgr *getMgr();
 	void flush();
 
+	/** Sources which share a caption are chained together in the order they
+	 *  are read from InstallMgr.conf: HTTPSPackagePreference first, then
+	 *  FTPSource, SFTPSource, HTTPSource, HTTPSSource.  Only the head of a
+	 *  chain appears in InstallMgr::sources.  A remote operation (refresh,
+	 *  install) tries each source in the chain, in order, until one succeeds,
+	 *  so an HTTPS PackagePreference chained before an FTP source gives
+	 *  "try https first, fall back to ftp".
+	 */
 	InstallSource *chainedSource;
+	/** true if this source is preferred for retrieving packages (e.g., an
+	 *  HTTPS mirror); it is tried before its chainedSource for single file
+	 *  downloads (packages/<Module>.zip, mods.d.tar.gz) but is never asked
+	 *  to list a directory, since http directory listings are not reliable
+	 *  across servers; directory copies fall through to the chainedSource.
+	 */
 	bool packagePreference;
 };
 
@@ -100,6 +114,19 @@ protected:
 public:
 
 	static bool userDisclaimerConfirmed;
+
+	/** installModule / refreshRemoteSource results are: 0 = OK; > 0 = not a failure but not
+	 *  done, e.g., module not found; -1 = user requested termination; -2 = cipher key required
+	 *  and not provided; and, to preserve the underlying failure code, banded by which step
+	 *  failed (test the most negative band first when decoding):
+	 *  <= REMOTE_ERROR_BASE   remote transfer failed: REMOTE_ERROR_BASE + last remoteCopy result
+	 *  <= COPYDIR_ERROR_BASE  copying module data into the library failed: COPYDIR_ERROR_BASE + FileMgr::copyDir result
+	 *  <= COPYFILE_ERROR_BASE copying a module file (e.g., its .conf) into the library failed: COPYFILE_ERROR_BASE + FileMgr::copyFile result
+	 */
+	static const int REMOTE_ERROR_BASE;
+	static const int COPYDIR_ERROR_BASE;
+	static const int COPYFILE_ERROR_BASE;
+
 	static const unsigned int MODSTAT_OLDER;
 	static const unsigned int MODSTAT_SAMEVERSION;
 	static const unsigned int MODSTAT_UPDATED;
@@ -147,6 +174,9 @@ public:
 	 * @dest - path to local destination
 	 * @dirTransfer - whether or not the resource to be copies is a folder
 	 * @suffix - a resource suffix filter to limit resources copied if {dirTransfer} is true, e.g., ".conf"
+	 *
+	 * @return 0 = OK; -1 = user requested termination; < -1 = some kind of problem
+	 *   (the RemoteTransport's result is passed through; see RemoteTransport::getURL)
 	 */
 	virtual int remoteCopy(InstallSource *is, const char *src, const char *dest, bool dirTransfer = false, const char *suffix = "");
 
@@ -156,7 +186,12 @@ public:
 	 * @modName - name of module to install
 	 * @is - remote installation source from which to install (null if installing locally)
 	 *
-	 * @return error status; 0 = OK; -9 = user aborted; see copyFile and copyDir for other error return codes
+	 * If {is} is the head of a chain of sources (see InstallSource::chainedSource) each source
+	 * in the chain is tried in order until one succeeds.
+	 *
+	 * @return 0 = OK; 1 = module not found in the source; -1 = user requested termination;
+	 *   -2 = cipher key required and not provided; < -1000 = failure, see REMOTE_ERROR_BASE
+	 *   and friends for how to decode which step failed and why
 	 */
 	virtual int installModule(SWMgr *destMgr, const char *fromLocation, const char *modName, InstallSource *is = 0);
 
@@ -165,6 +200,12 @@ public:
 	 * This must be called before the remote source can be used. 
 	 * This can be called again to refresh the remote source information from the remote source,
 	 * i.e., to see new and updated modules
+	 * If {is} is the head of a chain of sources (see InstallSource::chainedSource) each source
+	 * in the chain is tried in order until one succeeds, and the result is made available in
+	 * the local shadow of every source in the chain.
+	 *
+	 * @return 0 = OK; -1 = user requested termination; < -1000 = REMOTE_ERROR_BASE + the last
+	 *   remoteCopy result (see REMOTE_ERROR_BASE)
 	 */
 	virtual int refreshRemoteSource(InstallSource *is);
 
