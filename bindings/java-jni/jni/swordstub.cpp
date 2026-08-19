@@ -311,27 +311,30 @@ SWLOGI("libsword: extraConfig %s at path: %s", exists?"Exists":"Absent", confPat
 SWLOGI("libsword: init() creating WebMgr using path: %s", baseDir.c_str());
 		mgr = new WebMgr(baseDir, exists?confPath.c_str():nullptr);
 
+		// augment from every other place modules might be (multiMod=false:
+		// a module present in more than one place appears once; the later
+		// path wins, rather than showing up again as Name_1)
 		if (sharedStorage && strcmp(baseDir.c_str(), SHARED_STORAGE_PATH)) { // NOLINT(bugprone-suspicious-string-compare)
 SWLOGI("libsword: init() augmenting modules from: %s", SHARED_STORAGE_PATH);
-			mgr->augmentModules(SHARED_STORAGE_PATH, true);
+			mgr->augmentModules(SHARED_STORAGE_PATH, false);
 		}
 SWLOGI("libsword: init() augmenting modules from: %s", AND_BIBLE_MODULES_PATH);
 		// for And Bible modules
-		mgr->augmentModules(AND_BIBLE_MODULES_PATH, true);
+		mgr->augmentModules(AND_BIBLE_MODULES_PATH, false);
 		// if our basedir isn't the sdcard, let's augment the sdcard
 		if (strcmp(baseDir.c_str(), SDCARD_PATH)) { // NOLINT(bugprone-suspicious-string-compare)
 			SWLOGI("libsword: init() augmenting modules from: %s", SDCARD_PATH);
-			mgr->augmentModules(SDCARD_PATH, true);
+			mgr->augmentModules(SDCARD_PATH, false);
 		}
 		if (strcmp(baseDir.c_str(), OLD_SDCARD_PATH)) { // NOLINT(bugprone-suspicious-string-compare)
 SWLOGI("libsword: init() augmenting modules from: %s", OLD_SDCARD_PATH);
-			mgr->augmentModules(OLD_SDCARD_PATH, true);
+			mgr->augmentModules(OLD_SDCARD_PATH, false);
 		}
 		// if our basedir isn't the private storage base, let's augment the private
 		// storage base in case a previous version of the app stored modules there.
 		if (strcmp(baseDir.c_str(), STORAGE_BASE)) { // NOLINT(bugprone-suspicious-string-compare)
 SWLOGI("libsword: init() augmenting modules from: %s", STORAGE_BASE.c_str());
-			mgr->augmentModules(STORAGE_BASE, true);
+			mgr->augmentModules(STORAGE_BASE, false);
 		}
 SWLOGI("libsword: init() adding locales from baseDir.");
 		if (sharedStorage) {
