@@ -753,6 +753,10 @@ void SWMgr::loadConfigDir(const char *ipath, bool skipCache)
 	newModFile = basePath + "modules-conf.cache";
 	skipCache = skipCache || !FileMgr::existsFile(newModFile.c_str());
 
+	// one listing serves both the staleness check and the rebuild; asking
+	// for isDirectory lets a FileOps fill in modTime at the same time
+	std::vector<DirEntry> dirList = FileMgr::getDirList(ipath, false, true);
+
 	// The cache is only a speedup; it is always safe to throw it away.
 	// If anything in mods.d looks newer than the cache (a .conf added,
 	// removed, or edited by us or by anyone else), wipe it and rebuild.
@@ -760,10 +764,11 @@ void SWMgr::loadConfigDir(const char *ipath, bool skipCache)
 		long cacheTime = FileMgr::getFileModTime(newModFile.c_str());
 		if (FileMgr::getFileModTime(ipath) > cacheTime) skipCache = true;
 		else {
-			std::vector<DirEntry> dirList = FileMgr::getDirList(ipath, false, false);
 			for (unsigned int i = 0; i < dirList.size() && !skipCache; ++i) {
 				if (!dirList[i].name.endsWith(".conf")) continue;
-				if (FileMgr::getFileModTime((basePath + dirList[i].name).c_str()) > cacheTime) skipCache = true;
+				long modTime = dirList[i].modTime;	// 0 = the FileOps didn't know
+				if (!modTime) modTime = FileMgr::getFileModTime((basePath + dirList[i].name).c_str());
+				if (modTime > cacheTime) skipCache = true;
 			}
 		}
 	}
@@ -776,7 +781,6 @@ void SWMgr::loadConfigDir(const char *ipath, bool skipCache)
 	SWConfig *pathConfig = new SWConfig(newModFile);
 
 	if (skipCache) {
-		std::vector<DirEntry> dirList = FileMgr::getDirList(ipath);
 		for (unsigned int i = 0; i < dirList.size(); ++i) {
 			//check whether it ends with .conf, if it doesn't skip it!
 			if (!dirList[i].name.endsWith(".conf")) {

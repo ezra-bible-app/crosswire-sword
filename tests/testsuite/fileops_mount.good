@@ -1,0 +1,31 @@
+--- the virtual root doesn't exist on the OS, but does through FileMgr
+OS sees /sword-shared: no
+FileMgr sees /sword-shared: yes
+--- createPathAndFile / write / stat
+created: ok
+size: 73
+isDirectory(mods.d): 1
+modTime nonzero: 1
+--- SWConfig round trip
+Description: Hello World
+Lang after save: en
+--- FileDesc open / getLine through FileMgr pool
+first line: [Hello]
+--- copyDir / getDirList / removeDir
+backup/
+  modules/
+    hello/
+      ot (1)
+mods.d/
+  hello.conf (83)
+modules/
+  hello/
+    ot (1)
+backup after removeDir: gone
+--- SWMgr on the virtual path
+prefixPath: /sword-shared/
+module: Hello - Hello World
+--- real directory contents (through the OS, no mount)
+mods.d/
+modules/
+--- indirection was used: open 1 access 1 stat 1 list 1 mkdir 1 remove 1

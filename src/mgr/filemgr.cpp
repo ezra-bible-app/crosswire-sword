@@ -88,13 +88,175 @@ unsigned int FileMgr::IREAD = S_IREAD;
 unsigned int FileMgr::IWRITE = S_IWRITE;
 
 
+// ---------------- FileOps: the default, plain POSIX implementation -----------------
+
+FileOps::~FileOps() {
+}
+
+
+int FileOps::open(const char *path, int mode, int perms) {
+	return ::open(path, mode, perms);
+}
+
+
+bool FileOps::hasAccess(const char *path, int mode) {
+	return !access(path, mode);
+}
+
+
+int FileOps::stat(const char *path, DirEntry *entry) {
+	struct ::stat stats;
+	int error = ::stat(path, &stats);
+	if (error) return error;
+	const char *slash = strrchr(path, '/');
+	entry->name = (slash && slash[1]) ? slash + 1 : path;
+	entry->size = (unsigned long)stats.st_size;
+	entry->modTime = (long)stats.st_mtime;
+	entry->isDirectory = ((stats.st_mode & S_IFDIR) == S_IFDIR);
+	return 0;
+}
+
+
+std::vector<struct DirEntry> FileOps::listDir(const char *dirPath, bool includeSize, bool includeIsDirectory) {
+	std::vector<struct DirEntry> dirList;
+	SWBuf basePath = dirPath;
+	if (!basePath.endsWith("/")) basePath += "/";
+
+	DIR *dir;
+	struct dirent *ent;
+	if ((dir = opendir(dirPath))) {
+		rewinddir(dir);
+		while ((ent = readdir(dir))) {
+			if ((strcmp(ent->d_name, ".")) && (strcmp(ent->d_name, ".."))) {
+				struct DirEntry i;
+				i.name = ent->d_name;
+				i.size = 0;
+				i.isDirectory = false;
+				i.modTime = 0;
+				if (includeIsDirectory || includeSize) {
+					struct DirEntry st;
+					if (!this->stat(basePath + ent->d_name, &st)) {
+						i.isDirectory = st.isDirectory;
+						i.modTime = st.modTime;
+						if (!i.isDirectory && includeSize) i.size = st.size;
+					}
+				}
+				dirList.push_back(i);
+			}
+		}
+		closedir(dir);
+	}
+	return dirList;
+}
+
+
+int FileOps::mkdir(const char *path) {
+#ifndef WIN32
+	return ::mkdir(path, 0755);
+#else
+	return ::_mkdir(path);	// narrow-char CRT; FileOpsWin32 is the default on Windows
+#endif
+}
+
+
+int FileOps::remove(const char *path) {
+	return ::remove(path);
+}
+
+
+#ifdef WIN32
+// ---------------- FileOpsWin32 -----------------
+// FileOps for Windows: paths are UTF-8 as everywhere in SWORD and are
+// converted to wide chars for the _w* CRT calls and FindFirstFileW.
+namespace {
+class FileOpsWin32 : public FileOps {
+public:
+	virtual int open(const char *path, int mode, int perms);
+	virtual bool hasAccess(const char *path, int mode);
+	virtual int stat(const char *path, DirEntry *entry);
+	virtual std::vector<struct DirEntry> listDir(const char *dirPath, bool includeSize, bool includeIsDirectory);
+	virtual int mkdir(const char *path);
+	virtual int remove(const char *path);
+};
+
+int FileOpsWin32::open(const char *path, int mode, int perms) {
+	return ::_wopen((const wchar_t *)utf8ToWChar(path).getRawData(), mode, perms);
+}
+
+
+bool FileOpsWin32::hasAccess(const char *path, int mode) {
+	return !_waccess((const wchar_t *)utf8ToWChar(path).getRawData(), mode);
+}
+
+
+int FileOpsWin32::stat(const char *path, DirEntry *entry) {
+	struct _stat stats;
+	int error = _wstat((const wchar_t *)utf8ToWChar(path).getRawData(), &stats);
+	if (error) return error;
+	const char *slash = strrchr(path, '/');
+	const char *bslash = strrchr(path, '\\');
+	if (bslash > slash) slash = bslash;
+	entry->name = (slash && slash[1]) ? slash + 1 : path;
+	entry->size = (unsigned long)stats.st_size;
+	entry->modTime = (long)stats.st_mtime;
+	entry->isDirectory = ((stats.st_mode & S_IFDIR) == S_IFDIR);
+	return 0;
+}
+
+
+std::vector<struct DirEntry> FileOpsWin32::listDir(const char *dirPath, bool includeSize, bool includeIsDirectory) {
+	std::vector<struct DirEntry> dirList;
+	SWBuf basePath = dirPath;
+	if (!basePath.endsWith("/") && !basePath.endsWith("\\")) basePath += "/";
+
+	WIN32_FIND_DATAW fileData;
+	SWBuf wcharBuf = utf8ToWChar(basePath+"*");
+	const wchar_t *wcharPath = (const wchar_t *)wcharBuf.getRawData();
+	HANDLE findIterator = FindFirstFileW(wcharPath, &fileData);
+	if (findIterator != INVALID_HANDLE_VALUE) {
+		do {
+			SWBuf dirEntName = wcharToUTF8(fileData.cFileName);
+			if (dirEntName != "." && dirEntName != "..") {
+				struct DirEntry i;
+				i.name = dirEntName;
+				i.size = 0;
+				i.modTime = 0;
+				i.isDirectory = fileData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY;
+				if (!i.isDirectory && includeSize) {
+					struct DirEntry st;
+					if (!this->stat(basePath + i.name, &st)) i.size = st.size;
+				}
+				dirList.push_back(i);
+			}
+		} while (FindNextFileW(findIterator, &fileData) != 0);
+		FindClose(findIterator);
+	}
+	return dirList;
+}
+
+
+int FileOpsWin32::mkdir(const char *path) {
+	return _wmkdir((const wchar_t *)utf8ToWChar(path).getRawData());
+}
+
+
+int FileOpsWin32::remove(const char *path) {
+	return ::_wremove((const wchar_t *)utf8ToWChar(path).getRawData());
+}
+}	// anonymous namespace
+#endif
+
+// ---------------- end FileOps -----------------
+
+
 // ---------------- statics -----------------
 FileMgr *FileMgr::systemFileMgr = 0;
+FileOps *FileMgr::systemFileOps = 0;
 
 class __staticsystemFileMgr {
 public:
 	__staticsystemFileMgr() { }
-	~__staticsystemFileMgr() { delete FileMgr::systemFileMgr; }
+	~__staticsystemFileMgr() { delete FileMgr::systemFileMgr; delete FileMgr::systemFileOps; }
 } _staticsystemFileMgr;
 
 
@@ -111,6 +273,27 @@ void FileMgr::setSystemFileMgr(FileMgr *newFileMgr) {
 		delete systemFileMgr;
 	systemFileMgr = newFileMgr;
 }
+
+
+FileOps *FileMgr::getSystemFileOps() {
+	if (!systemFileOps)
+#ifdef WIN32
+		systemFileOps = new FileOpsWin32();
+#else
+		systemFileOps = new FileOps();
+#endif
+
+	return systemFileOps;
+}
+
+
+void FileMgr::setSystemFileOps(FileOps *newFileOps) {
+	if (systemFileOps)
+		delete systemFileOps;
+	systemFileOps = newFileOps;
+}
+
+
 
 long FileMgr::write(int fd, const void *buf, long count) {
 	return ::write(fd, buf, count);
@@ -325,12 +508,7 @@ SWBuf FileMgr::getEnvValue(const char *variableName) {
 
 
 bool FileMgr::hasAccess(const char *path, int mode) {
-	return
-#ifdef WIN32
-		!_waccess((const wchar_t *)utf8ToWChar(path).getRawData(), mode);
-#else
-		!access(path, mode);
-#endif
+	return getSystemFileOps()->hasAccess(path, mode);
 }
 
 
@@ -377,52 +555,7 @@ signed char FileMgr::existsDir(const char *ipath, const char *idirName)
 
 
 std::vector<struct DirEntry> FileMgr::getDirList(const char *dirPath, bool includeSize, bool includeIsDirectory) {
-	std::vector<struct DirEntry> dirList;
-	SWBuf basePath = dirPath;
-	if (!basePath.endsWith("/") && !basePath.endsWith("\\")) basePath += "/";
-
-#ifndef WIN32
-	DIR *dir;
-	struct dirent *ent;
-	if ((dir = opendir(dirPath))) {
-		rewinddir(dir);
-		while ((ent = readdir(dir))) {
-			if ((strcmp(ent->d_name, ".")) && (strcmp(ent->d_name, ".."))) {
-				struct DirEntry i;
-				i.name = ent->d_name;
-				i.size = 0;
-				i.isDirectory = false;
-				if (includeIsDirectory || includeSize) i.isDirectory = FileMgr::isDirectory(basePath + ent->d_name);
-				if (!i.isDirectory && includeSize) i.size = FileMgr::getFileSize(basePath + ent->d_name);
-				dirList.push_back(i);
-			}
-		}
-		closedir(dir);
-	}
-
-#else
-	// Crappy Windows-specific code because well... They can't be conformant
-	WIN32_FIND_DATAW fileData;
-	SWBuf wcharBuf = utf8ToWChar(basePath+"*");
-	const wchar_t *wcharPath = (const wchar_t *)wcharBuf.getRawData();
-	HANDLE findIterator = FindFirstFileW(wcharPath, &fileData);
-	if (findIterator != INVALID_HANDLE_VALUE) {
-		do {
-			SWBuf dirEntName = wcharToUTF8(fileData.cFileName);
-			if (dirEntName != "." && dirEntName != "..") {
-				struct DirEntry i;
-				i.name = dirEntName;
-				i.size = 0;
-				i.isDirectory = fileData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY;
-				if (!i.isDirectory && includeSize) i.size = FileMgr::getFileSize(basePath + i.name);
-				dirList.push_back(i);
-			}
-		} while (FindNextFileW(findIterator, &fileData) != 0);
-		FindClose(findIterator);
-	}
-#endif
-
-	return dirList;
+	return getSystemFileOps()->listDir(dirPath, includeSize, includeIsDirectory);
 }
 
 
@@ -440,20 +573,10 @@ int FileMgr::createParent(const char *pName) {
 	buf[end] = 0;
 	if (strlen(buf)>0) {
 		if (!hasAccess(buf, 02)) {  // not exists with write access?
-			retCode =
-#ifndef WIN32
-				mkdir(buf, 0755);
-#else
-				_wmkdir((const wchar_t *)utf8ToWChar(buf).getRawData());
-#endif
+			retCode = getSystemFileOps()->mkdir(buf);
 			if (retCode) {
 				createParent(buf);
-				retCode =
-#ifndef WIN32
-					mkdir(buf, 0755);
-#else
-					_wmkdir((const wchar_t *)utf8ToWChar(buf).getRawData());
-#endif
+				retCode = getSystemFileOps()->mkdir(buf);
 			}
 		}
 	}
@@ -464,13 +587,7 @@ int FileMgr::createParent(const char *pName) {
 
 
 int FileMgr::openFile(const char *fName, int mode, int perms) {
-	int fd =
-#ifndef WIN32
-		::open(fName, mode, perms);
-#else
-		::_wopen((const wchar_t *)utf8ToWChar(fName).getRawData(), mode, perms);
-#endif
-	return fd;
+	return getSystemFileOps()->open(fName, mode, perms);
 }
 
 
@@ -525,12 +642,7 @@ int FileMgr::copyFile(const char *sourceFile, const char *targetFile) {
 
 
 int FileMgr::removeFile(const char *fName) {
-	return
-#ifndef WIN32
-	::remove(fName);
-#else
-	::_wremove((const wchar_t *)utf8ToWChar(fName).getRawData());
-#endif
+	return getSystemFileOps()->remove(fName);
 }
 
 
@@ -626,41 +738,23 @@ SWBuf FileMgr::loadFile(FileDesc *fDesc, bool strip, bool skipCommentLines) {
 
 
 char FileMgr::isDirectory(const char *path) {
-#ifndef WIN32
-	struct stat stats;
-	int error = stat(path, &stats);
-#else
-	struct _stat stats;
-	int error = _wstat((const wchar_t *)utf8ToWChar(path).getRawData(), &stats);
-#endif
-	if (error) return 0;
-	return ((stats.st_mode & S_IFDIR) == S_IFDIR);
+	DirEntry st;
+	if (getSystemFileOps()->stat(path, &st)) return 0;
+	return st.isDirectory;
 }
 
 
 long FileMgr::getFileSize(const char *path) {
-#ifndef WIN32
-	struct stat stats;
-	int error = stat(path, &stats);
-#else
-	struct _stat stats;
-	int error = _wstat((const wchar_t *)utf8ToWChar(path).getRawData(), &stats);
-#endif
-	if (error) return 0;
-	return stats.st_size;
+	DirEntry st;
+	if (getSystemFileOps()->stat(path, &st)) return 0;
+	return st.size;
 }
 
 
 long FileMgr::getFileModTime(const char *path) {
-#ifndef WIN32
-	struct stat stats;
-	int error = stat(path, &stats);
-#else
-	struct _stat stats;
-	int error = _wstat((const wchar_t *)utf8ToWChar(path).getRawData(), &stats);
-#endif
-	if (error) return 0;
-	return (long)stats.st_mtime;
+	DirEntry st;
+	if (getSystemFileOps()->stat(path, &st)) return 0;
+	return st.modTime;
 }
 
 
@@ -746,5 +840,3 @@ SWBuf FileMgr::getHomeDir() {
 
 
 SWORD_NAMESPACE_END
-
-

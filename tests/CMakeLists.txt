@@ -13,6 +13,7 @@ SET(test_PROGRAMS
 	filtertest
 	httptest
 	installmgrtest
+	fileopstest
 	introtest
 	indextest
 	keycast
