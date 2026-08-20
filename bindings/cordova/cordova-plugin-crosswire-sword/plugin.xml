@@ -43,10 +43,6 @@
                 <param name="android-package" value="org.crosswire.sword.cordova.SWORD"/>
             </feature>
         </config-file>
-	<config-file target="AndroidManifest.xml" parent="/manifest">
-	    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
-	</config-file>
-
         <source-file src="src/android/SWORD.java" target-dir="src/org/crosswire/sword/cordova" />
         <source-file src="src/android/SWMgr.java" target-dir="src/org/crosswire/android/sword" />
         <source-file src="src/android/AndroidMgr.java" target-dir="src/org/crosswire/android/sword" />
