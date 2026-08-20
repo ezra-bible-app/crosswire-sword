@@ -105,7 +105,10 @@ public class AndroidMgr extends SWMgr {
 	 * The conventional location (Documents/sword) is created if absent --
 	 * an app may create its own folders under public storage without any
 	 * permission -- and the picker opens there, so accepting the
-	 * convention is a single tap. */
+	 * convention is a single tap.  Only the folder itself is created:
+	 * library scaffolding (mods.d) is laid down through the grant after
+	 * selection, and showing a mods.d in the picker would tempt the user
+	 * to descend into it and grant the wrong tree. */
 	public static Intent      createOpenSharedStorageIntent() {
 		Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
 		intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION
@@ -113,7 +116,7 @@ public class AndroidMgr extends SWMgr {
 			| Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
 			| Intent.FLAG_GRANT_PREFIX_URI_PERMISSION);
 		try {
-			File conventional = new File(Environment.getExternalStorageDirectory(), DEFAULT_SHARED_FOLDER + "/mods.d");
+			File conventional = new File(Environment.getExternalStorageDirectory(), DEFAULT_SHARED_FOLDER);
 			if (!conventional.isDirectory() && !conventional.mkdirs())
 				Log.i(TAG, "could not pre-create " + conventional + "; picker will open at its default location");
 			if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
