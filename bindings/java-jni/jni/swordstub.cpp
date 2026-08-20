@@ -364,34 +364,23 @@ void initInstall(JNIEnv *env, jobject progressReporter = nullptr) {
 	installStatusReporter->init(env, progressReporter);
 	if (!installMgr) {
 SWLOGI("initInstall: installMgr is null");
-		SWBuf baseDir;
-		SWBuf confPath;
-		if (sharedStorage) {
-			baseDir  = SHARED_STORAGE_PATH;
-			baseDir += "/InstallMgr";
-			confPath = baseDir + "/InstallMgr.conf";
+		// NOTE: the InstallMgr work area (remote source shadows, download
+		// staging) deliberately does NOT go to shared storage: it is per-app
+		// working state, and refreshing a source untars a couple thousand
+		// small .conf files -- pathological through a content provider
+		// (one binder create+open per file).  Only the destination library
+		// is shared; installs into it copy just the module's own files.
+		SWBuf baseDir  = SDCARD_PATH;
+		baseDir += "/InstallMgr";
+		SWBuf confPath = baseDir + "/InstallMgr.conf";
+		// be sure we have at least some config file already out there
 SWLOGI("initInstall: confPath: %s", confPath.c_str());
-			if (!FileMgr::existsFile(confPath.c_str()) && firstInstallInit) {
+		if (!FileMgr::existsFile(confPath.c_str()) && firstInstallInit) {
 SWLOGI("initInstall: file doesn't exist: %s", confPath.c_str());
-				FileMgr::createParent(confPath.c_str());
-				SWConfig config(confPath.c_str());
-				config["General"]["PassiveFTP"] = "true";
-				config.save();
-			}
-		}
-		if (!sharedStorage || !FileMgr::existsFile(confPath.c_str())) {
-			baseDir  = SDCARD_PATH;
-			baseDir += "/InstallMgr";
-			confPath = baseDir + "/InstallMgr.conf";
-			// be sure we have at least some config file already out there
-SWLOGI("initInstall: confPath: %s", confPath.c_str());
-			if (!FileMgr::existsFile(confPath.c_str()) && firstInstallInit) {
-SWLOGI("initInstall: file doesn't exist: %s", confPath.c_str());
-				FileMgr::createParent(confPath.c_str());
-				SWConfig config(confPath.c_str());
-				config["General"]["PassiveFTP"] = "true";
-				config.save();
-			}
+			FileMgr::createParent(confPath.c_str());
+			SWConfig config(confPath.c_str());
+			config["General"]["PassiveFTP"] = "true";
+			config.save();
 		}
 		if (!FileMgr::existsFile(confPath.c_str())) {
 			baseDir = OLD_SDCARD_PATH;
