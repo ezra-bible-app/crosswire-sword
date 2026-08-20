@@ -337,10 +337,9 @@ SWLOGI("libsword: init() augmenting modules from: %s", STORAGE_BASE.c_str());
 			mgr->augmentModules(STORAGE_BASE, false);
 		}
 SWLOGI("libsword: init() adding locales from baseDir.");
-		if (sharedStorage) {
-			LocaleMgr::getSystemLocaleMgr()->loadConfigDir(SHARED_STORAGE_PATH "/locales.d");
-			LocaleMgr::getSystemLocaleMgr()->loadConfigDir(SHARED_STORAGE_PATH "/uilocales.d");
-		}
+		// locales deliberately do NOT load from shared storage: the app ships
+		// its own (copied into STORAGE_BASE) and per-file opens through a
+		// content provider cost ~0.7s per directory on every init
 		LocaleMgr::getSystemLocaleMgr()->loadConfigDir(SWBuf(STORAGE_BASE + "/locales.d").c_str());
 		LocaleMgr::getSystemLocaleMgr()->loadConfigDir(SWBuf(STORAGE_BASE + "/uilocales.d").c_str());
 		LocaleMgr::getSystemLocaleMgr()->loadConfigDir((SWBuf(SDCARD_PATH) + "/locales.d").c_str());
