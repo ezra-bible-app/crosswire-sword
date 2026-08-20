@@ -77,7 +77,6 @@ namespace {
     bool sharedStorage = false;	// a SharedStorageFileOps is installed; SHARED_STORAGE_PATH is live
     const char *OLD_SDCARD_PATH = "/sdcard/sword";
     const char *SDCARD_PATH = "/sdcard/Documents/sword";
-    const char *AND_BIBLE_MODULES_PATH = "/sdcard/Android/data/net.bible.android.activity/files";
 //ANativeActivity *_activity;
 
     typedef map<SWBuf, SWBuf> SearchFilterValuesType;
@@ -241,62 +240,23 @@ static void init(JNIEnv *env) {
 	}
 	if (!mgr) {
 SWLOGI("libsword: init() begin");
-		SWBuf baseDir;
-		SWBuf confPath;
-		// a shared library between SWORD apps, reached through the app's
-		// SharedStorage (see SWMgr.getSharedStorage()), wins if we have one
-		if (sharedStorage) {
-			baseDir  = SHARED_STORAGE_PATH;
-			confPath = baseDir + "/mods.d/globals.conf";
-			if (!FileMgr::existsFile(confPath.c_str()) && setupStorage) {
-SWLOGI("libsword: init() sword config not found in shared storage, attempting to create parent of: %s", confPath.c_str());
-				FileMgr::createParent(confPath.c_str());
-SWLOGI("libsword: init() saving basic: %s", confPath.c_str());
-				SWConfig config(confPath.c_str());
-				config["Globals"]["HiAndroid"] = "weeee";
-				config.save();
-			}
-		}
-		if (!sharedStorage || !FileMgr::existsFile(confPath.c_str())) {
-			baseDir  = SDCARD_PATH;
-			confPath = baseDir + "/mods.d/globals.conf";
-			// be sure we have at least some config file already out there
-			if (!FileMgr::existsFile(confPath.c_str()) && setupStorage) {
+		// The library base is the shared folder when the user has granted
+		// one (see SWMgr.getSharedStorage()), else the app's private
+		// storage.  We no longer create a base on the legacy /sdcard paths:
+		// modern Android lets an app create its own files there without any
+		// permission, but they are invisible to other apps and orphaned by
+		// an uninstall -- a library which LOOKS shared and quietly isn't.
+		// Existing legacy libraries are still read (augmented) below.
+		SWBuf baseDir  = sharedStorage ? SHARED_STORAGE_PATH : STORAGE_BASE.c_str();
+		SWBuf confPath = baseDir + "/mods.d/globals.conf";
+		if (!FileMgr::existsFile(confPath.c_str()) && setupStorage) {
 SWLOGI("libsword: init() sword config not found, attempting to create parent of: %s", confPath.c_str());
-				FileMgr::createParent(confPath.c_str());
-				remove(confPath.c_str());
-
+			FileMgr::createParent(confPath.c_str());
+			remove(confPath.c_str());
 SWLOGI("libsword: init() saving basic: %s", confPath.c_str());
-				SWConfig config(confPath.c_str());
-				config["Globals"]["HiAndroid"] = "weeee";
-				config.save();
-			}
-		}
-		if (!FileMgr::existsFile(confPath.c_str())) {
-			baseDir = OLD_SDCARD_PATH;
-			confPath = baseDir + "/mods.d/globals.conf";
-			SWLOGI("libsword: init() sword config STILL not found, switching to STORAGE_PATH (parent of): %s", confPath.c_str());
-			if (!FileMgr::existsFile(confPath.c_str()) && setupStorage) {
-				FileMgr::createParent(confPath.c_str());
-				remove(confPath.c_str());
-				SWLOGI("libsword: init() saving basic: %s", confPath.c_str());
-				SWConfig config(confPath.c_str());
-				config["Globals"]["HiAndroid"] = "weeee";
-				config.save();
-			}
-		}
-		if (!FileMgr::existsFile(confPath.c_str())) {
-			baseDir = STORAGE_BASE;
-			confPath = baseDir + "/mods.d/globals.conf";
-SWLOGI("libsword: init() sword config STILL not found, switching to STORAGE_PATH (parent of): %s", confPath.c_str());
-			if (!FileMgr::existsFile(confPath.c_str()) && setupStorage) {
-				FileMgr::createParent(confPath.c_str());
-				remove(confPath.c_str());
-SWLOGI("libsword: init() saving basic: %s", confPath.c_str());
-				SWConfig config(confPath.c_str());
-				config["Globals"]["HiAndroid"] = "weeee";
-				config.save();
-			}
+			SWConfig config(confPath.c_str());
+			config["Globals"]["HiAndroid"] = "weeee";
+			config.save();
 		}
 		confPath = STORAGE_BASE + "/extraConfig.conf";
 		bool exists = FileMgr::existsFile(confPath.c_str());
@@ -314,24 +274,19 @@ SWLOGI("libsword: init() creating WebMgr using path: %s", baseDir.c_str());
 		// augment from every other place modules might be (multiMod=false:
 		// a module present in more than one place appears once; the later
 		// path wins, rather than showing up again as Name_1)
-		if (sharedStorage && strcmp(baseDir.c_str(), SHARED_STORAGE_PATH)) { // NOLINT(bugprone-suspicious-string-compare)
-SWLOGI("libsword: init() augmenting modules from: %s", SHARED_STORAGE_PATH);
-			mgr->augmentModules(SHARED_STORAGE_PATH, false);
-		}
-SWLOGI("libsword: init() augmenting modules from: %s", AND_BIBLE_MODULES_PATH);
-		// for And Bible modules
-		mgr->augmentModules(AND_BIBLE_MODULES_PATH, false);
-		// if our basedir isn't the sdcard, let's augment the sdcard
-		if (strcmp(baseDir.c_str(), SDCARD_PATH)) { // NOLINT(bugprone-suspicious-string-compare)
-			SWLOGI("libsword: init() augmenting modules from: %s", SDCARD_PATH);
+		// legacy libraries on the sdcard: read them where they exist and
+		// are still reachable (in-place-upgraded installs, old Android),
+		// but never create or prefer them
+		if (strcmp(baseDir.c_str(), SDCARD_PATH) && FileMgr::existsDir(SDCARD_PATH, "mods.d")) {
+SWLOGI("libsword: init() augmenting modules from: %s", SDCARD_PATH);
 			mgr->augmentModules(SDCARD_PATH, false);
 		}
-		if (strcmp(baseDir.c_str(), OLD_SDCARD_PATH)) { // NOLINT(bugprone-suspicious-string-compare)
+		if (strcmp(baseDir.c_str(), OLD_SDCARD_PATH) && FileMgr::existsDir(OLD_SDCARD_PATH, "mods.d")) {
 SWLOGI("libsword: init() augmenting modules from: %s", OLD_SDCARD_PATH);
 			mgr->augmentModules(OLD_SDCARD_PATH, false);
 		}
 		// if our basedir isn't the private storage base, let's augment the private
-		// storage base in case a previous version of the app stored modules there.
+		// storage base (e.g., bundled modules while a shared library is active)
 		if (strcmp(baseDir.c_str(), STORAGE_BASE)) { // NOLINT(bugprone-suspicious-string-compare)
 SWLOGI("libsword: init() augmenting modules from: %s", STORAGE_BASE.c_str());
 			mgr->augmentModules(STORAGE_BASE, false);
@@ -363,16 +318,14 @@ void initInstall(JNIEnv *env, jobject progressReporter = nullptr) {
 	installStatusReporter->init(env, progressReporter);
 	if (!installMgr) {
 SWLOGI("initInstall: installMgr is null");
-		// NOTE: the InstallMgr work area (remote source shadows, download
-		// staging) deliberately does NOT go to shared storage: it is per-app
-		// working state, and refreshing a source untars a couple thousand
-		// small .conf files -- pathological through a content provider
-		// (one binder create+open per file).  Only the destination library
-		// is shared; installs into it copy just the module's own files.
-		SWBuf baseDir  = SDCARD_PATH;
+		// The InstallMgr work area (remote source shadows, download staging)
+		// is per-app working state and lives in private storage: refreshing
+		// a source untars a couple thousand small files (pathological
+		// through a content provider), and on the sdcard the area is
+		// orphaned by every uninstall anyway.
+		SWBuf baseDir  = STORAGE_BASE;
 		baseDir += "/InstallMgr";
 		SWBuf confPath = baseDir + "/InstallMgr.conf";
-		// be sure we have at least some config file already out there
 SWLOGI("initInstall: confPath: %s", confPath.c_str());
 		if (!FileMgr::existsFile(confPath.c_str()) && firstInstallInit) {
 SWLOGI("initInstall: file doesn't exist: %s", confPath.c_str());
@@ -380,28 +333,6 @@ SWLOGI("initInstall: file doesn't exist: %s", confPath.c_str());
 			SWConfig config(confPath.c_str());
 			config["General"]["PassiveFTP"] = "true";
 			config.save();
-		}
-		if (!FileMgr::existsFile(confPath.c_str())) {
-			baseDir = OLD_SDCARD_PATH;
-			confPath = baseDir + "/InstallMgr.conf";
-			if (!FileMgr::existsFile(confPath.c_str()) && firstInstallInit) {
-				SWLOGI("initInstall: file STILL doesn't exist, switching to STORAGE_BASE (parent of): %s", confPath.c_str());
-				FileMgr::createParent(confPath.c_str());
-				SWConfig config(confPath.c_str());
-				config["General"]["PassiveFTP"] = "true";
-				config.save();
-			}
-		}
-		if (!FileMgr::existsFile(confPath.c_str())) {
-			baseDir = STORAGE_BASE;
-			confPath = baseDir + "/InstallMgr.conf";
-			if (!FileMgr::existsFile(confPath.c_str()) && firstInstallInit) {
-SWLOGI("initInstall: file STILL doesn't exist, switching to STORAGE_BASE (parent of): %s", confPath.c_str());
-				FileMgr::createParent(confPath.c_str());
-				SWConfig config(confPath.c_str());
-				config["General"]["PassiveFTP"] = "true";
-				config.save();
-			}
 		}
 		installMgr = new InstallMgr(baseDir, installStatusReporter);
 		if (disclaimerConfirmed) installMgr->setUserDisclaimerConfirmed(true);
