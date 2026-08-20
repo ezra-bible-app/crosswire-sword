@@ -479,6 +479,11 @@ Log.d(TAG, "... finished renderChapter");
 			// let the user pick (or create) a folder shared between SWORD apps
 			// and use it as the module library; calls back with its uri, or
 			// "" if the user cancelled
+			if (chooseSharedStorageContext != null) {
+				// a picker is already up; don't stack a second request
+				callbackContext.error("chooseSharedStorage already in progress");
+				return true;
+			}
 			chooseSharedStorageContext = callbackContext;
 			cordova.startActivityForResult(this, AndroidMgr.createOpenSharedStorageIntent(), REQUEST_CHOOSE_SHARED_STORAGE);
 			PluginResult pending = new PluginResult(PluginResult.Status.NO_RESULT);
