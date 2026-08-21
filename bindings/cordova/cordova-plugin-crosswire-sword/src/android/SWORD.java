@@ -777,7 +777,11 @@ Log.d(TAG, "makeRequest(url: " + url + ", postData: " + postData + ", method: " 
 			int responseCode = connection.getResponseCode();
 Log.d(TAG, "response code: " + responseCode);
 //Log.d(TAG, "getting response");
-			BufferedReader br = new BufferedReader(new InputStreamReader(connection.getInputStream()));
+			// on an HTTP error status the body comes from the error stream;
+			// callers still want it (e.g., a JSON error message)
+			java.io.InputStream responseStream = (responseCode >= 400) ? connection.getErrorStream() : connection.getInputStream();
+			if (responseStream == null) responseStream = connection.getInputStream();
+			BufferedReader br = new BufferedReader(new InputStreamReader(responseStream));
 			StringBuilder response = new StringBuilder();
 			String line;
 			while ((line = br.readLine()) != null) {
