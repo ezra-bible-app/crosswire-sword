@@ -467,6 +467,47 @@ SWMgr.prototype.clearSharedStorage = function(callback) {
 	);
 }
 
+// Plain file access, routed through the engine's FileMgr so that paths under
+// the shared library (getPrefixPath()) work whether it is private storage or
+// a SAF folder.  Meant for small user data kept beside the library, e.g.
+// bookmarks/*.conf.  Each calls back (result, err); err is set on failure
+// and is never reported with an alert.
+SWMgr.prototype.readFile = function(path, callback) {
+	exec(function(contents) { if (callback) callback(contents); },
+		function(err) { if (callback) callback(null, err); },
+		"SWORD", "SWMgr_readFile", [path]
+	);
+}
+
+SWMgr.prototype.writeFile = function(path, contents, callback) {
+	exec(function() { if (callback) callback(true); },
+		function(err) { if (callback) callback(false, err); },
+		"SWORD", "SWMgr_writeFile", [path, contents]
+	);
+}
+
+// Entry names; subdirectories carry a trailing "/".
+SWMgr.prototype.listDir = function(path, callback) {
+	exec(function(names) { if (callback) callback(names); },
+		function(err) { if (callback) callback([], err); },
+		"SWORD", "SWMgr_listDir", [path]
+	);
+}
+
+SWMgr.prototype.removeFile = function(path, callback) {
+	exec(function() { if (callback) callback(true); },
+		function(err) { if (callback) callback(false, err); },
+		"SWORD", "SWMgr_removeFile", [path]
+	);
+}
+
+SWMgr.prototype.mkdir = function(path, callback) {
+	exec(function() { if (callback) callback(true); },
+		function(err) { if (callback) callback(false, err); },
+		"SWORD", "SWMgr_mkdir", [path]
+	);
+}
+
 function HTTPUtils() {}
 
 HTTPUtils.prototype.METHOD_GET  =  0;

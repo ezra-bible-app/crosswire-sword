@@ -302,6 +302,66 @@ debugPrint("initMgr, mgr: " + String(describing: mgr))
         self.commandDelegate!.send(CDVPluginResult(status: CDVCommandStatus_OK, messageAs: retVal), callbackId: command.callbackId)
     }
 
+    // Plain file access.  Android routes these through the engine's FileMgr
+    // so SAF-backed shared libraries work; iOS has no such indirection, so
+    // Foundation is equivalent.  (Not yet compiled on a Mac.)
+    @objc(SWMgr_readFile:)
+    func SWMgr_readFile(command: CDVInvokedUrlCommand) {
+        let path = command.arguments[0] as? String ?? ""
+        if let contents = try? String(contentsOfFile: path, encoding: .utf8) {
+            self.commandDelegate!.send(CDVPluginResult(status: CDVCommandStatus_OK, messageAs: contents), callbackId: command.callbackId)
+        } else {
+            self.commandDelegate!.send(CDVPluginResult(status: CDVCommandStatus_ERROR, messageAs: "couldn't read: " + path), callbackId: command.callbackId)
+        }
+    }
+
+    @objc(SWMgr_writeFile:)
+    func SWMgr_writeFile(command: CDVInvokedUrlCommand) {
+        let path = command.arguments[0] as? String ?? ""
+        let contents = command.arguments[1] as? String ?? ""
+        do {
+            try FileManager.default.createDirectory(atPath: (path as NSString).deletingLastPathComponent, withIntermediateDirectories: true)
+            try contents.write(toFile: path, atomically: true, encoding: .utf8)
+            self.commandDelegate!.send(CDVPluginResult(status: CDVCommandStatus_OK), callbackId: command.callbackId)
+        } catch {
+            self.commandDelegate!.send(CDVPluginResult(status: CDVCommandStatus_ERROR, messageAs: "couldn't write: " + path), callbackId: command.callbackId)
+        }
+    }
+
+    @objc(SWMgr_listDir:)
+    func SWMgr_listDir(command: CDVInvokedUrlCommand) {
+        let path = command.arguments[0] as? String ?? ""
+        var names: [String] = []
+        if let entries = try? FileManager.default.contentsOfDirectory(atPath: path) {
+            for e in entries {
+                var isDir: ObjCBool = false
+                FileManager.default.fileExists(atPath: (path as NSString).appendingPathComponent(e), isDirectory: &isDir)
+                names.append(isDir.boolValue ? e + "/" : e)
+            }
+        }
+        self.commandDelegate!.send(CDVPluginResult(status: CDVCommandStatus_OK, messageAs: names), callbackId: command.callbackId)
+    }
+
+    @objc(SWMgr_removeFile:)
+    func SWMgr_removeFile(command: CDVInvokedUrlCommand) {
+        let path = command.arguments[0] as? String ?? ""
+        if (try? FileManager.default.removeItem(atPath: path)) != nil {
+            self.commandDelegate!.send(CDVPluginResult(status: CDVCommandStatus_OK), callbackId: command.callbackId)
+        } else {
+            self.commandDelegate!.send(CDVPluginResult(status: CDVCommandStatus_ERROR, messageAs: "couldn't remove: " + path), callbackId: command.callbackId)
+        }
+    }
+
+    @objc(SWMgr_mkdir:)
+    func SWMgr_mkdir(command: CDVInvokedUrlCommand) {
+        let path = command.arguments[0] as? String ?? ""
+        if (try? FileManager.default.createDirectory(atPath: path, withIntermediateDirectories: true)) != nil {
+            self.commandDelegate!.send(CDVPluginResult(status: CDVCommandStatus_OK), callbackId: command.callbackId)
+        } else {
+            self.commandDelegate!.send(CDVPluginResult(status: CDVCommandStatus_ERROR, messageAs: "couldn't create: " + path), callbackId: command.callbackId)
+        }
+    }
+
     
     @objc(echo:)
     func echo(command: CDVInvokedUrlCommand) {

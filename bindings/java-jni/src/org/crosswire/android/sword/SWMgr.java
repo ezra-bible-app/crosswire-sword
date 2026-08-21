@@ -53,6 +53,14 @@ public class SWMgr {
 	public native SWModule    getModuleByName(String name);
 	public native String      getPrefixPath();
 	public native String      getConfigPath();
+
+	// plain file access routed through the engine's FileMgr, so paths
+	// under the shared (SAF) library work the same as private ones
+	public native String      readFile(String path);		// null if unreadable
+	public native boolean     writeFile(String path, String contents);	// creates parent dirs
+	public native String[]    listDir(String path);		// subdirectories end in "/"
+	public native boolean     removeFile(String path);
+	public native boolean     mkdir(String path);
 	public native void        setGlobalOption(String option, String value);
 	public native String      getGlobalOption(String option);
 	public native String      getGlobalOptionTip(String option);

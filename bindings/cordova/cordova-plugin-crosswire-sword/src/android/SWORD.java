@@ -470,6 +470,28 @@ Log.d(TAG, "... finished renderChapter");
 			String prefixPath = mgr.getPrefixPath();
 			callbackContext.success(prefixPath);
 		}
+		else if (action.equals("SWMgr_readFile")) {
+			String contents = mgr.readFile(args.getString(0));
+			if (contents == null) callbackContext.error("couldn't read: " + args.getString(0));
+			else callbackContext.success(contents);
+		}
+		else if (action.equals("SWMgr_writeFile")) {
+			if (mgr.writeFile(args.getString(0), args.getString(1))) callbackContext.success();
+			else callbackContext.error("couldn't write: " + args.getString(0));
+		}
+		else if (action.equals("SWMgr_listDir")) {
+			JSONArray r = new JSONArray();
+			for (String s : mgr.listDir(args.getString(0))) r.put(s);
+			callbackContext.success(r);
+		}
+		else if (action.equals("SWMgr_removeFile")) {
+			if (mgr.removeFile(args.getString(0))) callbackContext.success();
+			else callbackContext.error("couldn't remove: " + args.getString(0));
+		}
+		else if (action.equals("SWMgr_mkdir")) {
+			if (mgr.mkdir(args.getString(0))) callbackContext.success();
+			else callbackContext.error("couldn't create: " + args.getString(0));
+		}
 		else if (action.equals("SWMgr_getSharedStorage")) {
 			// the shared module library folder in use, or "" for private storage only
 			android.net.Uri uri = ((AndroidMgr)mgr).getSharedStorageUri();

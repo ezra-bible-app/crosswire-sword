@@ -1088,6 +1088,112 @@ JNIEXPORT jstring JNICALL Java_org_crosswire_android_sword_SWMgr_translate
 }
 
 
+// Plain file access through FileMgr -------------------------------------------------------------
+//
+// Routed through the engine's FileMgr (and so its FileOps) rather than
+// java.io, so the same paths a module library uses work here too: private
+// storage, the /sword-shared SAF-backed library, anything a future FileOps
+// adds.  Frontends use these for small user data kept beside the library,
+// e.g. bookmarks/*.conf.
+
+JNIEXPORT jstring JNICALL Java_org_crosswire_android_sword_SWMgr_readFile
+		(JNIEnv *env, jobject me, jstring pathJS) {
+
+	init(env);
+
+	const char *path = env->GetStringUTFChars(pathJS, nullptr);
+	SWBuf contents;
+	bool ok = false;
+
+	FileDesc *fd = FileMgr::getSystemFileMgr()->open(path, FileMgr::RDONLY);
+	if (fd && fd->getFd() >= 0) {
+		char buf[4096];
+		long bytes;
+		while ((bytes = fd->read(buf, sizeof(buf))) > 0) {
+			contents.append(buf, bytes);
+		}
+		ok = (bytes == 0);
+	}
+	if (fd) FileMgr::getSystemFileMgr()->close(fd);
+	env->ReleaseStringUTFChars(pathJS, path);
+
+	return ok ? strToUTF8Java(env, assureValidUTF8(contents.c_str())) : nullptr;
+}
+
+JNIEXPORT jboolean JNICALL Java_org_crosswire_android_sword_SWMgr_writeFile
+		(JNIEnv *env, jobject me, jstring pathJS, jstring contentsJS) {
+
+	init(env);
+
+	const char *path = env->GetStringUTFChars(pathJS, nullptr);
+	const char *contents = env->GetStringUTFChars(contentsJS, nullptr);
+	bool ok = false;
+
+	FileMgr::createParent(path);
+	FileDesc *fd = FileMgr::getSystemFileMgr()->open(path, FileMgr::CREAT | FileMgr::WRONLY | FileMgr::TRUNC, FileMgr::IREAD | FileMgr::IWRITE);
+	if (fd && fd->getFd() >= 0) {
+		long len = (long)strlen(contents);
+		ok = (fd->write(contents, len) == len);
+	}
+	if (fd) FileMgr::getSystemFileMgr()->close(fd);
+
+	env->ReleaseStringUTFChars(contentsJS, contents);
+	env->ReleaseStringUTFChars(pathJS, path);
+
+	return ok ? JNI_TRUE : JNI_FALSE;
+}
+
+// names of the entries in a directory; subdirectories carry a trailing '/'
+JNIEXPORT jobjectArray JNICALL Java_org_crosswire_android_sword_SWMgr_listDir
+		(JNIEnv *env, jobject me, jstring pathJS) {
+
+	init(env);
+
+	const char *path = env->GetStringUTFChars(pathJS, nullptr);
+	std::vector<DirEntry> entries = FileMgr::getDirList(path);
+	env->ReleaseStringUTFChars(pathJS, path);
+
+	jclass clazzString = env->FindClass("java/lang/String");
+	jobjectArray ret = (jobjectArray) env->NewObjectArray((jsize)entries.size(), clazzString, nullptr);
+	int count = 0;
+	for (std::vector<DirEntry>::const_iterator it = entries.begin(); it != entries.end(); ++it) {
+		SWBuf name = it->name;
+		if (it->isDirectory) name += "/";
+		jstring s = strToUTF8Java(env, name);
+		env->SetObjectArrayElement(ret, count++, s);
+		env->DeleteLocalRef(s);
+	}
+	return ret;
+}
+
+JNIEXPORT jboolean JNICALL Java_org_crosswire_android_sword_SWMgr_removeFile
+		(JNIEnv *env, jobject me, jstring pathJS) {
+
+	init(env);
+
+	const char *path = env->GetStringUTFChars(pathJS, nullptr);
+	bool ok = (FileMgr::removeFile(path) == 0);
+	env->ReleaseStringUTFChars(pathJS, path);
+
+	return ok ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT jboolean JNICALL Java_org_crosswire_android_sword_SWMgr_mkdir
+		(JNIEnv *env, jobject me, jstring pathJS) {
+
+	init(env);
+
+	const char *path = env->GetStringUTFChars(pathJS, nullptr);
+	SWBuf inner = path;
+	if (!inner.endsWith("/")) inner += "/";
+	inner += ".";		// createParent makes every directory above the final component
+	bool ok = (FileMgr::createParent(inner.c_str()) == 0) || FileMgr::existsDir(path);
+	env->ReleaseStringUTFChars(pathJS, path);
+
+	return ok ? JNI_TRUE : JNI_FALSE;
+}
+
+
 // SWModule methods ----------------------------------------------------------------------------------
 
 
