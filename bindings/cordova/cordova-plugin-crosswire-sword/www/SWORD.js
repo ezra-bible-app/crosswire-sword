@@ -467,6 +467,52 @@ SWMgr.prototype.clearSharedStorage = function(callback) {
 	);
 }
 
+// Where the app should keep small per-user study data (bookmarks/, ...):
+// the separately chosen data folder if there is one, else beside the module
+// library.  Ends in '/'.
+SWMgr.prototype.getDataPath = function(callback) {
+	exec(callback?callback:function() {},
+		function(err) { utils.alert('[ERROR] problem: ' + err); },
+		"SWORD", "SWMgr_getDataPath", []
+	);
+}
+
+// The study-data folder chosen separately from the library (Android: a SAF
+// document tree, which may live on a cloud provider such as Drive).  Calls
+// back with its uri, or "" if study data lives beside the library.
+SWMgr.prototype.getDataStorage = function(callback) {
+	exec(callback?callback:function() {},
+		function(err) { utils.alert('[ERROR] problem: ' + err); },
+		"SWORD", "SWMgr_getDataStorage", []
+	);
+}
+
+// Let the user pick a study-data folder.  SWORD is re-initialized.  Calls
+// back with the folder's uri, or "" if the user cancelled.
+SWMgr.prototype.chooseDataStorage = function(callback) {
+	exec(callback?callback:function() {},
+		function(err) { utils.alert('[ERROR] problem: ' + err); },
+		"SWORD", "SWMgr_chooseDataStorage", []
+	);
+}
+
+// A human label for a granted folder uri, "<provider app> / <folder>"
+// (e.g. "Drive / sword-bookmarks"); "" if it can't be described.
+SWMgr.prototype.describeTree = function(uri, callback) {
+	exec(callback?callback:function() {},
+		function(err) { if (callback) callback(''); },
+		"SWORD", "SWMgr_describeTree", [uri]
+	);
+}
+
+// Keep study data beside the module library again.
+SWMgr.prototype.clearDataStorage = function(callback) {
+	exec(callback?callback:function() {},
+		function(err) { utils.alert('[ERROR] problem: ' + err); },
+		"SWORD", "SWMgr_clearDataStorage", []
+	);
+}
+
 // Plain file access, routed through the engine's FileMgr so that paths under
 // the shared library (getPrefixPath()) work whether it is private storage or
 // a SAF folder.  Meant for small user data kept beside the library, e.g.

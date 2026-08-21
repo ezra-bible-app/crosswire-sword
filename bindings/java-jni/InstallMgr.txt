@@ -1,0 +1,35 @@
+Compiled from "InstallMgr.java"
+public class org.crosswire.android.sword.InstallMgr {
+  public org.crosswire.android.sword.InstallMgr();
+    descriptor: ()V
+
+  public native void reInit();
+    descriptor: ()V
+
+  public native void setUserDisclaimerConfirmed();
+    descriptor: ()V
+
+  public native int syncConfig();
+    descriptor: ()I
+
+  public native int uninstallModule(java.lang.String);
+    descriptor: (Ljava/lang/String;)I
+
+  public native java.lang.String[] getRemoteSources();
+    descriptor: ()[Ljava/lang/String;
+
+  public native int refreshRemoteSource(java.lang.String);
+    descriptor: (Ljava/lang/String;)I
+
+  public native org.crosswire.android.sword.SWMgr$ModInfo[] getRemoteModInfoList(java.lang.String);
+    descriptor: (Ljava/lang/String;)[Lorg/crosswire/android/sword/SWMgr$ModInfo;
+
+  public native int remoteInstallModule(java.lang.String, java.lang.String, org.crosswire.android.sword.InstallMgr$InstallProgressReporter);
+    descriptor: (Ljava/lang/String;Ljava/lang/String;Lorg/crosswire/android/sword/InstallMgr$InstallProgressReporter;)I
+
+  public int remoteInstallModule(java.lang.String, java.lang.String);
+    descriptor: (Ljava/lang/String;Ljava/lang/String;)I
+
+  public native org.crosswire.android.sword.SWModule getRemoteModuleByName(java.lang.String, java.lang.String);
+    descriptor: (Ljava/lang/String;Ljava/lang/String;)Lorg/crosswire/android/sword/SWModule;
+}

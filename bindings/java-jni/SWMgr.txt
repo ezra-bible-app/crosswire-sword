@@ -1,0 +1,117 @@
+Compiled from "SWMgr.java"
+public class org.crosswire.android.sword.SWMgr {
+  public static final java.lang.String SHARED_STORAGE_PATH;
+    descriptor: Ljava/lang/String;
+  public static final java.lang.String DATA_STORAGE_PATH;
+    descriptor: Ljava/lang/String;
+  public org.crosswire.android.sword.SWMgr();
+    descriptor: ()V
+
+  public org.crosswire.android.sword.SWMgr(boolean);
+    descriptor: (Z)V
+
+  public native java.lang.String version();
+    descriptor: ()Ljava/lang/String;
+
+  public native void reInit();
+    descriptor: ()V
+
+  public native org.crosswire.android.sword.SWMgr$ModInfo[] getModInfoList();
+    descriptor: ()[Lorg/crosswire/android/sword/SWMgr$ModInfo;
+
+  public native org.crosswire.android.sword.SWModule getModuleByName(java.lang.String);
+    descriptor: (Ljava/lang/String;)Lorg/crosswire/android/sword/SWModule;
+
+  public native java.lang.String getPrefixPath();
+    descriptor: ()Ljava/lang/String;
+
+  public native java.lang.String getConfigPath();
+    descriptor: ()Ljava/lang/String;
+
+  public native java.lang.String getDataPath();
+    descriptor: ()Ljava/lang/String;
+
+  public native java.lang.String readFile(java.lang.String);
+    descriptor: (Ljava/lang/String;)Ljava/lang/String;
+
+  public native boolean writeFile(java.lang.String, java.lang.String);
+    descriptor: (Ljava/lang/String;Ljava/lang/String;)Z
+
+  public native java.lang.String[] listDir(java.lang.String);
+    descriptor: (Ljava/lang/String;)[Ljava/lang/String;
+
+  public native boolean removeFile(java.lang.String);
+    descriptor: (Ljava/lang/String;)Z
+
+  public native boolean mkdir(java.lang.String);
+    descriptor: (Ljava/lang/String;)Z
+
+  public native void setGlobalOption(java.lang.String, java.lang.String);
+    descriptor: (Ljava/lang/String;Ljava/lang/String;)V
+
+  public native java.lang.String getGlobalOption(java.lang.String);
+    descriptor: (Ljava/lang/String;)Ljava/lang/String;
+
+  public native java.lang.String getGlobalOptionTip(java.lang.String);
+    descriptor: (Ljava/lang/String;)Ljava/lang/String;
+
+  public native java.lang.String filterText(java.lang.String, java.lang.String);
+    descriptor: (Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
+
+  public native java.lang.String[] getGlobalOptions();
+    descriptor: ()[Ljava/lang/String;
+
+  public native java.lang.String[] getGlobalOptionValues(java.lang.String);
+    descriptor: (Ljava/lang/String;)[Ljava/lang/String;
+
+  public native void setCipherKey(java.lang.String, java.lang.String);
+    descriptor: (Ljava/lang/String;Ljava/lang/String;)V
+
+  public native void setJavascript(boolean);
+    descriptor: (Z)V
+
+  public native java.lang.String[] getAvailableLocales();
+    descriptor: ()[Ljava/lang/String;
+
+  public native void setDefaultLocale(java.lang.String);
+    descriptor: (Ljava/lang/String;)V
+
+  public native java.lang.String translate(java.lang.String, java.lang.String);
+    descriptor: (Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
+
+  public native java.lang.String[] addExtraConfig(java.lang.String);
+    descriptor: (Ljava/lang/String;)[Ljava/lang/String;
+
+  public native void setExtraConfigValue(java.lang.String, java.lang.String, java.lang.String);
+    descriptor: (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+
+  public native java.lang.String[] getExtraConfigSections();
+    descriptor: ()[Ljava/lang/String;
+
+  public native java.lang.String[] getExtraConfigKeys(java.lang.String);
+    descriptor: (Ljava/lang/String;)[Ljava/lang/String;
+
+  public native java.lang.String getExtraConfigValue(java.lang.String, java.lang.String);
+    descriptor: (Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
+
+  public java.lang.String getStorageBasePath();
+    descriptor: ()Ljava/lang/String;
+
+  public org.crosswire.android.sword.SWMgr$SharedStorage getSharedStorage();
+    descriptor: ()Lorg/crosswire/android/sword/SWMgr$SharedStorage;
+
+  public org.crosswire.android.sword.SWMgr$SharedStorage getDataStorage();
+    descriptor: ()Lorg/crosswire/android/sword/SWMgr$SharedStorage;
+
+  public native void startBibleSync(java.lang.String, java.lang.String, java.lang.String, org.crosswire.android.sword.SWMgr$BibleSyncListener);
+    descriptor: (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lorg/crosswire/android/sword/SWMgr$BibleSyncListener;)V
+
+  public native void stopBibleSync();
+    descriptor: ()V
+
+  public native void sendBibleSyncMessage(java.lang.String);
+    descriptor: (Ljava/lang/String;)V
+
+  static {};
+    descriptor: ()V
+}

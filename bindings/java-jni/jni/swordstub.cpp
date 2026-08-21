@@ -75,6 +75,7 @@ namespace {
 #endif
     SWBuf STORAGE_BASE;
     bool sharedStorage = false;	// a SharedStorageFileOps is installed; SHARED_STORAGE_PATH is live
+    bool dataStorageMounted = false;	// DATA_STORAGE_PATH is live (a separately granted study-data folder)
     const char *OLD_SDCARD_PATH = "/sdcard/sword";
     const char *SDCARD_PATH = "/sdcard/Documents/sword";
 //ANativeActivity *_activity;
@@ -425,20 +426,31 @@ JNIEXPORT void JNICALL Java_org_crosswire_android_sword_SWMgr_reInit
 	env->ReleaseStringUTFChars(basePathJS, basePath);
 SWLOGI("setting STORAGE_BASE to: %s", STORAGE_BASE.c_str());
 
-	// route SHARED_STORAGE_PATH to the app's SharedStorage, if it offers one;
-	// otherwise plain paths only
+	// route SHARED_STORAGE_PATH to the app's SharedStorage (the shared
+	// module library) and DATA_STORAGE_PATH to its DataStorage (the
+	// study-data folder: bookmarks etc.), whichever it offers; otherwise
+	// plain paths only
+	SharedStorageFileOps *ops = new SharedStorageFileOps(env);
 	jmethodID getSharedStorage = env->GetMethodID(swmgrClass, "getSharedStorage", "()Lorg/crosswire/android/sword/SWMgr$SharedStorage;");
 	jobject storage = env->CallObjectMethod(me, getSharedStorage);
+	sharedStorage = false;
 	if (storage) {
 SWLOGI("installing SharedStorageFileOps at %s", SHARED_STORAGE_PATH);
-		FileMgr::setSystemFileOps(new SharedStorageFileOps(env, storage));
+		ops->addMount(env, SHARED_STORAGE_PATH, storage);
 		env->DeleteLocalRef(storage);
 		sharedStorage = true;
 	}
-	else {
-		FileMgr::setSystemFileOps(new FileOps());
-		sharedStorage = false;
+	jmethodID getDataStorage = env->GetMethodID(swmgrClass, "getDataStorage", "()Lorg/crosswire/android/sword/SWMgr$SharedStorage;");
+	jobject dataStorage = env->CallObjectMethod(me, getDataStorage);
+	dataStorageMounted = false;
+	if (dataStorage) {
+SWLOGI("installing DataStorage at %s", DATA_STORAGE_PATH);
+		ops->addMount(env, DATA_STORAGE_PATH, dataStorage);
+		env->DeleteLocalRef(dataStorage);
+		dataStorageMounted = true;
 	}
+	if (ops->hasMounts()) FileMgr::setSystemFileOps(ops);
+	else { delete ops; FileMgr::setSystemFileOps(new FileOps()); }
 	setupStorage = true;		// create a basic config in the new location if there is none
 	firstInstallInit = true;
 
@@ -455,6 +467,19 @@ JNIEXPORT jstring JNICALL Java_org_crosswire_android_sword_SWMgr_getPrefixPath
 	init(env);
 
 	return strToUTF8Java(env, mgr->prefixPath);
+}
+
+// Where the frontend keeps small per-user study data (bookmarks/, ...):
+// the separately granted data folder if there is one, else beside the
+// module library.  Always ends in '/'.
+JNIEXPORT jstring JNICALL Java_org_crosswire_android_sword_SWMgr_getDataPath
+		(JNIEnv *env, jobject me) {
+
+	init(env);
+
+	SWBuf path = dataStorageMounted ? SWBuf(DATA_STORAGE_PATH) : SWBuf(mgr->prefixPath);
+	if (!path.endsWith("/")) path += "/";
+	return strToUTF8Java(env, path);
 }
 
 JNIEXPORT jstring JNICALL Java_org_crosswire_android_sword_SWMgr_getConfigPath

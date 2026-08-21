@@ -57,6 +57,8 @@ public class SWORD extends CordovaPlugin {
 	private CallbackContext chooseSharedStorageContext = null;
 	private static final int REQUEST_SEND = 1;
 	private static final int REQUEST_CHOOSE_SHARED_STORAGE = 2;
+	private static final int REQUEST_CHOOSE_DATA_STORAGE = 3;
+	private CallbackContext chooseDataStorageContext = null;
 
 	/**
 	* Constructor.
@@ -512,6 +514,46 @@ Log.d(TAG, "... finished renderChapter");
 			pending.setKeepCallback(true);
 			callbackContext.sendPluginResult(pending);
 		}
+		else if (action.equals("SWMgr_describeTree")) {
+			// a human label for a granted document tree: "<provider app> / <folder name>"
+			String label = "";
+			try {
+				android.net.Uri tree = android.net.Uri.parse(args.getString(0));
+				android.content.Context ctx = cordova.getActivity().getApplicationContext();
+				android.content.pm.ProviderInfo pi = ctx.getPackageManager().resolveContentProvider(tree.getAuthority(), 0);
+				String provider = (pi != null) ? String.valueOf(ctx.getPackageManager().getApplicationLabel(pi.applicationInfo)) : "";
+				android.net.Uri doc = android.provider.DocumentsContract.buildDocumentUriUsingTree(tree, android.provider.DocumentsContract.getTreeDocumentId(tree));
+				String name = "";
+				android.database.Cursor c = ctx.getContentResolver().query(doc, new String[] { android.provider.DocumentsContract.Document.COLUMN_DISPLAY_NAME }, null, null, null);
+				if (c != null) { if (c.moveToFirst()) name = c.getString(0); c.close(); }
+				label = provider.length() > 0 ? provider + " / " + name : name;
+			}
+			catch (Exception e) { }
+			callbackContext.success(label);
+		}
+		else if (action.equals("SWMgr_getDataPath")) {
+			callbackContext.success(mgr.getDataPath());
+		}
+		else if (action.equals("SWMgr_getDataStorage")) {
+			// the separately chosen study-data folder, or "" if study data lives beside the library
+			android.net.Uri uri = ((AndroidMgr)mgr).getDataStorageUri();
+			callbackContext.success(uri != null ? uri.toString() : "");
+		}
+		else if (action.equals("SWMgr_chooseDataStorage")) {
+			if (chooseDataStorageContext != null) {
+				callbackContext.error("chooseDataStorage already in progress");
+				return true;
+			}
+			chooseDataStorageContext = callbackContext;
+			cordova.startActivityForResult(this, ((AndroidMgr)mgr).createOpenDataStorageIntent(), REQUEST_CHOOSE_DATA_STORAGE);
+			PluginResult pending = new PluginResult(PluginResult.Status.NO_RESULT);
+			pending.setKeepCallback(true);
+			callbackContext.sendPluginResult(pending);
+		}
+		else if (action.equals("SWMgr_clearDataStorage")) {
+			((AndroidMgr)mgr).setDataStorageUri(null);
+			callbackContext.success();
+		}
 		else if (action.equals("SWMgr_clearSharedStorage")) {
 			// go back to private storage only
 			((AndroidMgr)mgr).setSharedStorageUri(null);
@@ -856,6 +898,18 @@ Log.i(TAG, "an exception occurred in makeRequest thread: " + e);
 			if (chooseSharedStorageContext != null) {
 				chooseSharedStorageContext.success(result);
 				chooseSharedStorageContext = null;
+			}
+			break;
+		case REQUEST_CHOOSE_DATA_STORAGE:
+			String dataResult = "";
+			if (resultCode == Activity.RESULT_OK && intent != null && intent.getData() != null) {
+				((AndroidMgr)mgr).setDataStorageUri(intent.getData());
+				android.net.Uri duri = ((AndroidMgr)mgr).getDataStorageUri();
+				dataResult = (duri != null) ? duri.toString() : "";
+			}
+			if (chooseDataStorageContext != null) {
+				chooseDataStorageContext.success(dataResult);
+				chooseDataStorageContext = null;
 			}
 			break;
 		}

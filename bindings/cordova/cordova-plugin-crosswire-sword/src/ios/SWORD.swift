@@ -302,6 +302,31 @@ debugPrint("initMgr, mgr: " + String(describing: mgr))
         self.commandDelegate!.send(CDVPluginResult(status: CDVCommandStatus_OK, messageAs: retVal), callbackId: command.callbackId)
     }
 
+    // iOS keeps study data beside the module library (no separate grant).
+    @objc(SWMgr_getDataPath:)
+    func SWMgr_getDataPath(command: CDVInvokedUrlCommand) {
+        initMgr()
+        let prefixPath = org_crosswire_sword_SWMgr_getPrefixPath(mgr)
+        var retVal = prefixPath == nil ? "" : String(cString:prefixPath!)
+        if !retVal.hasSuffix("/") { retVal += "/" }
+        self.commandDelegate!.send(CDVPluginResult(status: CDVCommandStatus_OK, messageAs: retVal), callbackId: command.callbackId)
+    }
+
+    @objc(SWMgr_getDataStorage:)
+    func SWMgr_getDataStorage(command: CDVInvokedUrlCommand) {
+        self.commandDelegate!.send(CDVPluginResult(status: CDVCommandStatus_OK, messageAs: ""), callbackId: command.callbackId)
+    }
+
+    @objc(SWMgr_chooseDataStorage:)
+    func SWMgr_chooseDataStorage(command: CDVInvokedUrlCommand) {
+        self.commandDelegate!.send(CDVPluginResult(status: CDVCommandStatus_OK, messageAs: ""), callbackId: command.callbackId)
+    }
+
+    @objc(SWMgr_clearDataStorage:)
+    func SWMgr_clearDataStorage(command: CDVInvokedUrlCommand) {
+        self.commandDelegate!.send(CDVPluginResult(status: CDVCommandStatus_OK), callbackId: command.callbackId)
+    }
+
     // Plain file access.  Android routes these through the engine's FileMgr
     // so SAF-backed shared libraries work; iOS has no such indirection, so
     // Foundation is equivalent.  (Not yet compiled on a Mac.)

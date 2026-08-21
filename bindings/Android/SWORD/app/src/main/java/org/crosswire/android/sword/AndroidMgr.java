@@ -41,14 +41,20 @@ public class AndroidMgr extends SWMgr {
 	/** SharedPreferences file and key under which the shared library tree Uri is kept */
 	public static final String PREFS = "org.crosswire.android.sword";
 	public static final String PREF_SHARED_STORAGE_URI = "sharedStorageUri";
+	/** ... and the study-data (bookmarks etc.) tree Uri */
+	public static final String PREF_DATA_STORAGE_URI = "dataStorageUri";
+	/** the last data folder chosen, kept after "keep with library" so the picker can reopen there */
+	public static final String PREF_LAST_DATA_STORAGE_URI = "lastDataStorageUri";
 
 	private Application app;
 	private SafStorage sharedStorage;
+	private SafStorage dataStorage;
 
 	public AndroidMgr(Application app) {
 		super(false);
 		this.app = app;
 		loadSharedStorage();
+		loadDataStorage();
 		reInit();
 	}
 
@@ -97,6 +103,67 @@ public class AndroidMgr extends SWMgr {
 		reInit();
 	}
 
+	/**
+	 * The study-data folder (bookmarks/, ...), if the user has picked one
+	 * separately from the library -- typically a cloud-synced folder; null
+	 * means study data lives beside the module library.
+	 */
+	@Override
+	public SharedStorage      getDataStorage() {
+		return dataStorage;
+	}
+
+	public Uri                getDataStorageUri() {
+		return (dataStorage != null) ? dataStorage.getTreeUri() : null;
+	}
+
+	/** use (or stop using, with null) a document tree as the study-data folder */
+	public void               setDataStorageUri(Uri treeUri) {
+		Context context = app.getApplicationContext();
+		SharedPreferences prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+		if (treeUri != null) {
+			try {
+				context.getContentResolver().takePersistableUriPermission(treeUri,
+					Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+			}
+			catch (SecurityException e) {
+				Log.w(TAG, "could not persist grant for " + treeUri + ": " + e);
+			}
+			prefs.edit().putString(PREF_DATA_STORAGE_URI, treeUri.toString()).putString(PREF_LAST_DATA_STORAGE_URI, treeUri.toString()).apply();
+		}
+		else {
+			prefs.edit().remove(PREF_DATA_STORAGE_URI).apply();
+		}
+		loadDataStorage();
+		reInit();
+	}
+
+	/** the picker Intent for choosing a study-data folder; no conventional
+	 * location is pre-created -- the point of a separate folder is that
+	 * the user puts it somewhere of their own, e.g. on a cloud provider */
+	public Intent             createOpenDataStorageIntent() {
+		Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
+		intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION
+			| Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+			| Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+			| Intent.FLAG_GRANT_PREFIX_URI_PERMISSION);
+		// reopen where the user last chose (the remembered uri, even if its grant has lapsed)
+		String last = app.getApplicationContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(PREF_DATA_STORAGE_URI, null);
+		if (last == null) last = app.getApplicationContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(PREF_LAST_DATA_STORAGE_URI, null);
+		if (last != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+			try {
+				Uri tree = Uri.parse(last);
+				intent.putExtra(DocumentsContract.EXTRA_INITIAL_URI, DocumentsContract.buildDocumentUriUsingTree(tree, DocumentsContract.getTreeDocumentId(tree)));
+			}
+			catch (Exception e) { }
+		}
+		return intent;
+	}
+
+	private void              loadDataStorage() {
+		dataStorage = loadGrantedStorage(PREF_DATA_STORAGE_URI, "data storage");
+	}
+
 	/** the conventional shared library location offered to the user */
 	public static final String DEFAULT_SHARED_FOLDER = "Documents/sword";
 
@@ -131,10 +198,14 @@ public class AndroidMgr extends SWMgr {
 	}
 
 	private void              loadSharedStorage() {
-		sharedStorage = null;
+		sharedStorage = loadGrantedStorage(PREF_SHARED_STORAGE_URI, "shared storage");
+	}
+
+	/** the SafStorage for a remembered tree grant, or null if none / gone / unreachable */
+	private SafStorage        loadGrantedStorage(String prefKey, String what) {
 		Context context = app.getApplicationContext();
-		String uriString = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(PREF_SHARED_STORAGE_URI, null);
-		if (uriString == null) return;
+		String uriString = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(prefKey, null);
+		if (uriString == null) return null;
 		Uri treeUri = Uri.parse(uriString);
 
 		// still granted?
@@ -143,14 +214,14 @@ public class AndroidMgr extends SWMgr {
 			if (p.getUri().equals(treeUri) && p.isReadPermission() && p.isWritePermission()) { granted = true; break; }
 		}
 		if (!granted) {
-			Log.w(TAG, "grant for shared storage " + treeUri + " is gone; using private storage");
-			return;
+			Log.w(TAG, "grant for " + what + " " + treeUri + " is gone; ignoring it");
+			return null;
 		}
 		SafStorage storage = new SafStorage(context, treeUri);
 		if (!storage.isAvailable()) {
-			Log.w(TAG, "shared storage " + treeUri + " is not reachable; using private storage");
-			return;
+			Log.w(TAG, what + " " + treeUri + " is not reachable; ignoring it");
+			return null;
 		}
-		sharedStorage = storage;
+		return storage;
 	}
 }

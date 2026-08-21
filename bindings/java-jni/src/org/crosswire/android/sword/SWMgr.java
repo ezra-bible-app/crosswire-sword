@@ -53,6 +53,10 @@ public class SWMgr {
 	public native SWModule    getModuleByName(String name);
 	public native String      getPrefixPath();
 	public native String      getConfigPath();
+	/** where the frontend keeps small per-user study data (bookmarks/, ...):
+	 *  the data folder from getDataStorage() if set, else beside the module
+	 *  library; ends in '/' */
+	public native String      getDataPath();
 
 	// plain file access routed through the engine's FileMgr, so paths
 	// under the shared (SAF) library work the same as private ones
@@ -98,6 +102,8 @@ public class SWMgr {
 	 * is at SHARED_STORAGE_PATH + "/mods.d"
 	 */
 	public static final String SHARED_STORAGE_PATH = "/sword-shared";
+	/** likewise for the study-data folder of getDataStorage() */
+	public static final String DATA_STORAGE_PATH = "/sword-data";
 
 	public static class FileInfo {
 		public String name;
@@ -132,6 +138,11 @@ public class SWMgr {
 		public boolean    mkdir(String path);
 		/** remove a file or empty directory */
 		public boolean    remove(String path);
+		/** the library is done with a descriptor from open().  Return true
+		 *  if this store closed it (and committed whatever that entails,
+		 *  e.g. uploading a staged write); false to let the caller close
+		 *  it as an ordinary descriptor */
+		public boolean    close(int fd);
 	}
 
 	/**
@@ -140,6 +151,14 @@ public class SWMgr {
 	 * @return null if the library should use plain paths only
 	 */
 	public SharedStorage      getSharedStorage() {
+		return null;
+	}
+	/**
+	 * override in platform descendant to expose a separately granted folder
+	 * for small per-user study data (bookmarks/, ...), e.g. a cloud-synced
+	 * folder.  @return null to keep study data beside the module library
+	 */
+	public SharedStorage      getDataStorage() {
 		return null;
 	}
 	public static interface BibleSyncListener {

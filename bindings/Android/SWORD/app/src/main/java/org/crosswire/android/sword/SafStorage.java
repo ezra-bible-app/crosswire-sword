@@ -57,10 +57,27 @@ public class SafStorage implements SWMgr.SharedStorage {
 	private final ContentResolver resolver;
 	private final Uri treeUri;
 	private final String treeDocId;
+	private final java.io.File stagingDir;
+	/** providers whose descriptors are real files we may hand to native code
+	 *  directly; anything else (Drive, Nextcloud, ...) returns pipes whose
+	 *  content only commits when the ParcelFileDescriptor is closed from
+	 *  Java, so writes to those are staged in a local file and uploaded on
+	 *  close() */
+	private final boolean direct;
+
+	/** a write in progress against a non-local provider */
+	private static class Staged {
+		java.io.File tmp;
+		Uri doc;
+		String mode;		// provider mode for the upload: "w" or "wa"
+	}
+	private final Map<Integer, Staged> staged = new HashMap<Integer, Staged>();
 	// relative path -> document id, learned from listings and creations
 	private final Map<String, String> docIds = new HashMap<String, String>();
 
 	public SafStorage(Context context, Uri treeUri) {
+		this.stagingDir = new java.io.File(context.getCacheDir(), "saf-staging");
+		this.direct = "com.android.externalstorage.documents".equals(treeUri.getAuthority());
 		this.resolver = context.getContentResolver();
 		this.treeUri = treeUri;
 		this.treeDocId = DocumentsContract.getTreeDocumentId(treeUri);
@@ -194,6 +211,8 @@ public class SafStorage implements SWMgr.SharedStorage {
 			if (info != null && !nameOf(path).equals(info.name))
 				Log.w(TAG, "provider renamed " + nameOf(path) + " to " + info.name);
 		}
+		boolean writing = !mode.equals("r");
+		if (writing && !direct) return openStaged(path, id, mode);
 		try {
 			ParcelFileDescriptor pfd = resolver.openFileDescriptor(docUri(id), mode);
 			if (pfd == null) return -1;
@@ -203,6 +222,73 @@ public class SafStorage implements SWMgr.SharedStorage {
 			Log.w(TAG, "open failed for " + path + " (" + mode + "): " + e);
 			return -1;
 		}
+	}
+
+	/** give native code a local temp file to write; close() uploads it */
+	private int openStaged(String path, String id, String mode) {
+		try {
+			if (!stagingDir.isDirectory() && !stagingDir.mkdirs()) return -1;
+			java.io.File tmp = java.io.File.createTempFile("saf", ".tmp", stagingDir);
+			boolean truncate = mode.contains("t");
+			boolean append = mode.equals("wa");
+			if (!truncate) {
+				// start from the current content (an existing file opened read/write or for append)
+				try {
+					java.io.InputStream in = resolver.openInputStream(docUri(id));
+					if (in != null) {
+						java.io.FileOutputStream out = new java.io.FileOutputStream(tmp);
+						byte[] buf = new byte[65536]; int n;
+						while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+						out.close(); in.close();
+					}
+				}
+				catch (Exception e) { Log.w(TAG, "could not fetch current content of " + path + ": " + e); }
+			}
+			int flags = ParcelFileDescriptor.MODE_READ_WRITE | ParcelFileDescriptor.MODE_CREATE;
+			if (append) flags |= ParcelFileDescriptor.MODE_APPEND;
+			ParcelFileDescriptor pfd = ParcelFileDescriptor.open(tmp, flags);
+			int fd = pfd.detachFd();
+			Staged st = new Staged();
+			st.tmp = tmp; st.doc = docUri(id); st.mode = "wt";	// the whole staged file replaces the document
+			synchronized (staged) { staged.put(fd, st); }
+			return fd;
+		}
+		catch (Exception e) {
+			Log.w(TAG, "staged open failed for " + path + " (" + mode + "): " + e);
+			return -1;
+		}
+	}
+
+	@Override
+	public boolean close(int fd) {
+		Staged st;
+		synchronized (staged) { st = staged.remove(fd); }
+		if (st == null) return false;
+		boolean ok = false;
+		try {
+			ParcelFileDescriptor.adoptFd(fd).close();
+			java.io.OutputStream out;
+			try { out = resolver.openOutputStream(st.doc, st.mode); }
+			catch (Exception e) {
+				// not every provider knows "wt"; "w" then, and hope it truncates
+				Log.i(TAG, st.mode + " refused by provider, trying w: " + e);
+				out = resolver.openOutputStream(st.doc, "w");
+			}
+			if (out != null) {
+				java.io.FileInputStream in = new java.io.FileInputStream(st.tmp);
+				byte[] buf = new byte[65536]; int n;
+				while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+				in.close();
+				out.flush();
+				out.close();		// this is what commits the upload on pipe-based providers
+				ok = true;
+			}
+		}
+		catch (Exception e) {
+			Log.w(TAG, "upload of staged write to " + st.doc + " failed: " + e);
+		}
+		st.tmp.delete();
+		return true;	// we owned the descriptor either way
 	}
 
 	@Override

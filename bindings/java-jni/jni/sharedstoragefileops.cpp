@@ -37,16 +37,16 @@ namespace {
 }
 
 
-SharedStorageFileOps::SharedStorageFileOps(JNIEnv *env, jobject storage) {
+SharedStorageFileOps::SharedStorageFileOps(JNIEnv *env) {
 	env->GetJavaVM(&vm);
-	this->storage = env->NewGlobalRef(storage);
 
-	jclass clazz = env->GetObjectClass(storage);
+	jclass clazz = env->FindClass("org/crosswire/android/sword/SWMgr$SharedStorage");
 	mOpen   = env->GetMethodID(clazz, "open",   "(Ljava/lang/String;Ljava/lang/String;Z)I");
 	mStat   = env->GetMethodID(clazz, "stat",   "(Ljava/lang/String;)Lorg/crosswire/android/sword/SWMgr$FileInfo;");
 	mList   = env->GetMethodID(clazz, "list",   "(Ljava/lang/String;)[Lorg/crosswire/android/sword/SWMgr$FileInfo;");
 	mMkdir  = env->GetMethodID(clazz, "mkdir",  "(Ljava/lang/String;)Z");
 	mRemove = env->GetMethodID(clazz, "remove", "(Ljava/lang/String;)Z");
+	mClose  = env->GetMethodID(clazz, "close",  "(I)Z");
 	env->DeleteLocalRef(clazz);
 
 	jclass fi = env->FindClass("org/crosswire/android/sword/SWMgr$FileInfo");
@@ -63,10 +63,19 @@ SharedStorageFileOps::~SharedStorageFileOps() {
 	bool attached = false;
 	JNIEnv *env = getEnv(attached);
 	if (env) {
-		env->DeleteGlobalRef(storage);
+		for (size_t i = 0; i < mounts.size(); ++i) env->DeleteGlobalRef(mounts[i].storage);
 		env->DeleteGlobalRef(fileInfoClass);
 	}
 	if (attached) vm->DetachCurrentThread();
+}
+
+
+void SharedStorageFileOps::addMount(JNIEnv *env, const char *prefix, jobject storage) {
+	Mount m;
+	m.prefix = prefix;
+	while (m.prefix.length() > 1 && m.prefix.endsWith("/")) m.prefix.setSize(m.prefix.length() - 1);
+	m.storage = env->NewGlobalRef(storage);
+	mounts.push_back(m);
 }
 
 
@@ -83,16 +92,20 @@ JNIEnv *SharedStorageFileOps::getEnv(bool &attached) {
 }
 
 
-bool SharedStorageFileOps::rel(const char *path, SWBuf &rel) {
-	static const size_t len = strlen(SHARED_STORAGE_PATH);
-	if (strncmp(path, SHARED_STORAGE_PATH, len)) return false;
-	if (path[len] && path[len] != '/') return false;
-	const char *r = path + len;
-	while (*r == '/') ++r;
-	rel = r;
-	// normalize away any trailing slashes
-	while (rel.length() && rel.endsWith("/")) rel.setSize(rel.length() - 1);
-	return true;
+jobject SharedStorageFileOps::rel(const char *path, SWBuf &rel) {
+	for (size_t i = 0; i < mounts.size(); ++i) {
+		const SWBuf &prefix = mounts[i].prefix;
+		size_t len = prefix.length();
+		if (strncmp(path, prefix.c_str(), len)) continue;
+		if (path[len] && path[len] != '/') continue;
+		const char *r = path + len;
+		while (*r == '/') ++r;
+		rel = r;
+		// normalize away any trailing slashes
+		while (rel.length() && rel.endsWith("/")) rel.setSize(rel.length() - 1);
+		return mounts[i].storage;
+	}
+	return nullptr;
 }
 
 
@@ -108,7 +121,8 @@ void SharedStorageFileOps::toEntry(JNIEnv *env, jobject fileInfo, DirEntry *entr
 
 int SharedStorageFileOps::open(const char *path, int mode, int perms) {
 	SWBuf r;
-	if (!rel(path, r)) return FileOps::open(path, mode, perms);
+	jobject storage = rel(path, r);
+	if (!storage) return FileOps::open(path, mode, perms);
 
 	const char *m = "r";
 	if (mode & O_TRUNC) m = "rwt";
@@ -123,6 +137,7 @@ int SharedStorageFileOps::open(const char *path, int mode, int perms) {
 	jstring jm = env->NewStringUTF(m);
 	int fd = env->CallIntMethod(storage, mOpen, jp, jm, create ? JNI_TRUE : JNI_FALSE);
 	if (env->ExceptionCheck()) { env->ExceptionClear(); fd = -1; }
+	if (fd >= 0) issued[fd] = storage;
 	env->DeleteLocalRef(jp);
 	env->DeleteLocalRef(jm);
 	if (attached) vm->DetachCurrentThread();
@@ -132,7 +147,8 @@ int SharedStorageFileOps::open(const char *path, int mode, int perms) {
 
 bool SharedStorageFileOps::hasAccess(const char *path, int mode) {
 	SWBuf r;
-	if (!rel(path, r)) return FileOps::hasAccess(path, mode);
+	jobject storage = rel(path, r);
+	if (!storage) return FileOps::hasAccess(path, mode);
 	// a granted store is readable and writable as a whole; access == exists
 	DirEntry entry;
 	return !this->stat(path, &entry);
@@ -141,7 +157,8 @@ bool SharedStorageFileOps::hasAccess(const char *path, int mode) {
 
 int SharedStorageFileOps::stat(const char *path, DirEntry *entry) {
 	SWBuf r;
-	if (!rel(path, r)) return FileOps::stat(path, entry);
+	jobject storage = rel(path, r);
+	if (!storage) return FileOps::stat(path, entry);
 
 	bool attached;
 	JNIEnv *env = getEnv(attached);
@@ -163,7 +180,8 @@ int SharedStorageFileOps::stat(const char *path, DirEntry *entry) {
 
 std::vector<struct DirEntry> SharedStorageFileOps::listDir(const char *dirPath, bool includeSize, bool includeIsDirectory) {
 	SWBuf r;
-	if (!rel(dirPath, r)) return FileOps::listDir(dirPath, includeSize, includeIsDirectory);
+	jobject storage = rel(dirPath, r);
+	if (!storage) return FileOps::listDir(dirPath, includeSize, includeIsDirectory);
 
 	std::vector<struct DirEntry> dirList;
 	bool attached;
@@ -193,7 +211,8 @@ std::vector<struct DirEntry> SharedStorageFileOps::listDir(const char *dirPath, 
 
 int SharedStorageFileOps::mkdir(const char *path) {
 	SWBuf r;
-	if (!rel(path, r)) return FileOps::mkdir(path);
+	jobject storage = rel(path, r);
+	if (!storage) return FileOps::mkdir(path);
 	if (!r.length()) return 0;	// the root always exists
 
 	bool attached;
@@ -208,9 +227,25 @@ int SharedStorageFileOps::mkdir(const char *path) {
 }
 
 
+int SharedStorageFileOps::close(int fd) {
+	std::map<int, jobject>::iterator it = issued.find(fd);
+	if (it == issued.end()) return FileOps::close(fd);
+	jobject storage = it->second;
+	issued.erase(it);
+	bool attached;
+	JNIEnv *env = getEnv(attached);
+	if (!env) return FileOps::close(fd);
+	jboolean handled = env->CallBooleanMethod(storage, mClose, (jint)fd);
+	if (env->ExceptionCheck()) { env->ExceptionClear(); handled = JNI_FALSE; }
+	if (attached) vm->DetachCurrentThread();
+	return handled ? 0 : FileOps::close(fd);
+}
+
+
 int SharedStorageFileOps::remove(const char *path) {
 	SWBuf r;
-	if (!rel(path, r)) return FileOps::remove(path);
+	jobject storage = rel(path, r);
+	if (!storage) return FileOps::remove(path);
 	if (!r.length()) return -1;	// never remove the root
 
 	bool attached;

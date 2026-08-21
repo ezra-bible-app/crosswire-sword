@@ -1,0 +1,21 @@
+Compiled from "SWMgr.java"
+public class org.crosswire.android.sword.SWMgr$ModInfo {
+  public java.lang.String name;
+    descriptor: Ljava/lang/String;
+  public java.lang.String description;
+    descriptor: Ljava/lang/String;
+  public java.lang.String category;
+    descriptor: Ljava/lang/String;
+  public java.lang.String language;
+    descriptor: Ljava/lang/String;
+  public java.lang.String version;
+    descriptor: Ljava/lang/String;
+  public java.lang.String delta;
+    descriptor: Ljava/lang/String;
+  public java.lang.String cipherKey;
+    descriptor: Ljava/lang/String;
+  public java.lang.String[] features;
+    descriptor: [Ljava/lang/String;
+  public org.crosswire.android.sword.SWMgr$ModInfo();
+    descriptor: ()V
+}
