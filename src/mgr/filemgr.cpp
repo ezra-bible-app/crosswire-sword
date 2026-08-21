@@ -159,6 +159,11 @@ int FileOps::mkdir(const char *path) {
 }
 
 
+int FileOps::close(int fd) {
+	return ::close(fd);
+}
+
+
 int FileOps::remove(const char *path) {
 	return ::remove(path);
 }
@@ -398,7 +403,7 @@ int FileMgr::sysOpen(FileDesc *file) {
 		if ((*loop)->fd > 0) {
 			if (++openCount > maxFiles) {
 				(*loop)->offset = lseek((*loop)->fd, 0, SEEK_CUR);
-				::close((*loop)->fd);
+				getSystemFileOps()->close((*loop)->fd);
 				(*loop)->fd = -77;
 			}
 		}
@@ -471,9 +476,9 @@ signed char FileMgr::trunc(FileDesc *file) {
 		}
 		if (size < 1) {
 			// zero out the file
-			::close(file->fd);
+			getSystemFileOps()->close(file->fd);
 			file->fd = openFile(file->path, O_TRUNC, S_IREAD|S_IWRITE|S_IRGRP|S_IROTH);
-			::close(file->fd);
+			getSystemFileOps()->close(file->fd);
 			file->fd = -77;	// force file open by filemgr
 			// copy tmp file back (dumb, but must preserve file permissions)
 			fd->seek(0, SEEK_SET);
@@ -484,7 +489,7 @@ signed char FileMgr::trunc(FileDesc *file) {
 		}
 
 		close(fd);
-		::close(file->fd);
+		getSystemFileOps()->close(file->fd);
 		removeFile(buf);		// remove our tmp file
 		file->fd = -77;	// causes file to be swapped out forcing open on next call to getFd()
 	}
@@ -613,7 +618,7 @@ int FileMgr::createPathAndFile(const char *fName) {
 
 
 void FileMgr::closeFile(int fd) {
-	::close(fd);
+	getSystemFileOps()->close(fd);
 }
 
 
@@ -624,7 +629,7 @@ int FileMgr::copyFile(const char *sourceFile, const char *targetFile) {
 	if ((sfd = openFile(sourceFile, O_RDONLY|O_BINARY, S_IREAD|S_IWRITE|S_IRGRP|S_IROTH)) < 1)
 		return -1;
 	if ((dfd = createPathAndFile(targetFile)) < 1) {
-		::close(sfd);
+		getSystemFileOps()->close(sfd);
 		return -1;
 	}
 
@@ -634,8 +639,8 @@ int FileMgr::copyFile(const char *sourceFile, const char *targetFile) {
 		if (write(dfd, buf, len) != len) break;
 	}
 	while(len == 4096);
-	::close(dfd);
-	::close(sfd);
+	getSystemFileOps()->close(dfd);
+	getSystemFileOps()->close(sfd);
 
 	return 0;
 }
@@ -803,7 +808,7 @@ void FileMgr::flush() {
 	for (loop = &files; *loop; loop = &((*loop)->next)) {
 		if ((*loop)->fd > 0) {
 			(*loop)->offset = lseek((*loop)->fd, 0, SEEK_CUR);
-			::close((*loop)->fd);
+			getSystemFileOps()->close((*loop)->fd);
 			(*loop)->fd = -77;
 		}
 	}

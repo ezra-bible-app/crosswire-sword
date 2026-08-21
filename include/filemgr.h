@@ -58,7 +58,8 @@ public:
  * base implementation for everything else.
  *
  * The descriptor returned from open() must be an ordinary OS file
- * descriptor: FileMgr does read/write/seek/close on it directly.
+ * descriptor: FileMgr does read/write/seek on it directly, and hands it
+ * back to close() when done.
  */
 class SWDLLEXPORT FileOps {
 public:
@@ -84,6 +85,11 @@ public:
 
 	/** remove a file or an empty directory. @return 0 on success */
 	virtual int remove(const char *path);
+
+	/** close a descriptor obtained from open().  Overridden by backends
+	 * whose descriptors need more than ::close to commit (e.g. a staged
+	 * write uploaded to a document provider).  @return 0 on success */
+	virtual int close(int fd);
 };
 
 
