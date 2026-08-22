@@ -92,28 +92,34 @@ public class SWORD extends CordovaPlugin {
 	* @return                  True if the action was valid, false if not.
 	*/
 	/**
-	 * libsword is not thread-safe, and a few actions run on the thread pool
-	 * (chapter rendering, searching, installing) while others -- including
-	 * re-initialization when the user picks a library folder -- run on the
-	 * main thread.  Every touch of the manager therefore takes this lock;
-	 * the one long-lived pool task (the BibleSync listener) stays outside it.
+	 * libsword is not thread-safe.  Every touch of the manager happens on
+	 * this one thread, in the order requested: no lock, no chance of two
+	 * calls overlapping, no UI-thread call ever waiting on a long one, and
+	 * no pile of pool threads parked behind a search.  The two things which
+	 * must not queue stay off it: terminateSearch (it only raises the
+	 * engine's cancel flag, which the running search polls) and the
+	 * BibleSync listener (a long-lived thread of its own).
 	 */
-	private static final Object swordLock = new Object();
+	private static final java.util.concurrent.ExecutorService swordThread =
+		java.util.concurrent.Executors.newSingleThreadExecutor(new java.util.concurrent.ThreadFactory() {
+			public Thread newThread(Runnable r) { Thread t = new Thread(r, "sword"); t.setDaemon(true); return t; }
+		});
 
 	private static void runLocked(final CordovaInterface cordova, final Runnable r) {
-		cordova.getThreadPool().execute(new Runnable() {
-			@Override
-			public void run() { synchronized (swordLock) { r.run(); } }
-		});
+		swordThread.execute(r);
 	}
 
 	public boolean execute(final String action, final JSONArray args, final CallbackContext callbackContext) throws JSONException {
-		// Every action runs on the thread pool under the lock, never on the
-		// UI thread: a long pool task (a search, a chapter render) would
-		// otherwise hold the lock while the UI thread waited on it for a
-		// translate() or a config lookup, freezing the screen.  Calls are
-		// asynchronous from JavaScript's side regardless; JS's own callback
-		// chains keep dependent calls in order.
+		// Cancelling a search must not wait behind the search itself.
+		if (action.equals("SWModule_terminateSearch")) {
+			SWModule mod = mgr.getModuleByName(args.getString(0));
+			if (mod != null) mod.terminateSearch();
+			callbackContext.success();
+			return true;
+		}
+		// Everything else runs on the SWORD thread, in order, never on the
+		// UI thread.  Calls are asynchronous from JavaScript's side
+		// regardless; JS's own callback chains keep dependent calls in order.
 		runLocked(cordova, new Runnable() {
 			@Override
 			public void run() {
@@ -950,9 +956,18 @@ Log.i(TAG, "an exception occurred in makeRequest thread: " + e);
 		case REQUEST_CHOOSE_SHARED_STORAGE:
 			String result = "";
 			if (resultCode == Activity.RESULT_OK && intent != null && intent.getData() != null) {
-				synchronized (swordLock) { ((AndroidMgr)mgr).setSharedStorageUri(intent.getData()); }
-				android.net.Uri uri = ((AndroidMgr)mgr).getSharedStorageUri();
-				result = (uri != null) ? uri.toString() : "";
+				final android.net.Uri chosen = intent.getData();
+				final CallbackContext ctx = chooseSharedStorageContext;
+				chooseSharedStorageContext = null;
+				runLocked(cordova, new Runnable() {
+					@Override
+					public void run() {
+						((AndroidMgr)mgr).setSharedStorageUri(chosen);
+						android.net.Uri uri = ((AndroidMgr)mgr).getSharedStorageUri();
+						if (ctx != null) ctx.success((uri != null) ? uri.toString() : "");
+					}
+				});
+				break;
 			}
 			if (chooseSharedStorageContext != null) {
 				chooseSharedStorageContext.success(result);
@@ -962,9 +977,18 @@ Log.i(TAG, "an exception occurred in makeRequest thread: " + e);
 		case REQUEST_CHOOSE_DATA_STORAGE:
 			String dataResult = "";
 			if (resultCode == Activity.RESULT_OK && intent != null && intent.getData() != null) {
-				synchronized (swordLock) { ((AndroidMgr)mgr).setDataStorageUri(intent.getData()); }
-				android.net.Uri duri = ((AndroidMgr)mgr).getDataStorageUri();
-				dataResult = (duri != null) ? duri.toString() : "";
+				final android.net.Uri chosenData = intent.getData();
+				final CallbackContext dctx = chooseDataStorageContext;
+				chooseDataStorageContext = null;
+				runLocked(cordova, new Runnable() {
+					@Override
+					public void run() {
+						((AndroidMgr)mgr).setDataStorageUri(chosenData);
+						android.net.Uri duri = ((AndroidMgr)mgr).getDataStorageUri();
+						if (dctx != null) dctx.success((duri != null) ? duri.toString() : "");
+					}
+				});
+				break;
 			}
 			if (chooseDataStorageContext != null) {
 				chooseDataStorageContext.success(dataResult);
