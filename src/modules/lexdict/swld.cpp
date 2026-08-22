@@ -39,6 +39,12 @@ SWORD_NAMESPACE_START
  *	idisp	 - Display object to use for displaying
  */
 
+SWLD::SWLD(const SWLD &other) : SWModule(other), strongsPadding(other.strongsPadding) {
+	entkeytxt = new char [1];
+	*entkeytxt = 0;
+}
+
+
 SWLD::SWLD(const char *imodname, const char *imoddesc, SWDisplay *idisp, SWTextEncoding enc, SWTextDirection dir, SWTextMarkup mark, const char* ilang, bool strongsPadding) : SWModule(imodname, imoddesc, idisp, (char *)"Lexicons / Dictionaries", enc, dir, mark, ilang), strongsPadding(strongsPadding)
 {
 	delete key;

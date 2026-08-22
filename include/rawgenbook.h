@@ -45,6 +45,9 @@ public:
 			SWTextDirection dir = DIRECTION_LTR,
 			SWTextMarkup markup = FMT_UNKNOWN, const char* ilang = 0, const char *keyType = "TreeKey");
 	virtual ~RawGenBook();
+	/** copy, with its own file descriptors */
+	RawGenBook(const RawGenBook &other);
+	virtual SWModule *clone() const { return new RawGenBook(*this); }
 	virtual SWBuf &getRawEntryBuf() const;
 	// write interface ----------------------------
 	virtual bool isWritable() const;

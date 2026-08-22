@@ -37,6 +37,8 @@ class SWBuf;
 class SWDLLEXPORT zVerse4 {
 
 private:
+	int fileMode;
+	int blockType;
 	SWCompress *compressor;
 
 protected:
@@ -66,6 +68,8 @@ public:
 
 	// fileMode default = RDONLY
 	zVerse4(const char *ipath, int fileMode = -1, int blockType = CHAPTERBLOCKS, SWCompress * icomp = 0);
+	/** copy, with its own file descriptors */
+	zVerse4(const zVerse4 &other);
 	virtual ~zVerse4();
 
 	void findOffset(char testmt, long idxoff, long *start, unsigned long *size, unsigned long *buffnum) const;

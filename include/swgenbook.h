@@ -50,6 +50,7 @@ public:
 			SWTextMarkup markup = FMT_UNKNOWN, const char* ilang = 0);
 
 	virtual ~SWGenBook();
+	SWGenBook(const SWGenBook &other);
 	virtual SWKey *createKey() const = 0;
 
 

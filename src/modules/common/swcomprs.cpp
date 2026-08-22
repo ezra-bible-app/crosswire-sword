@@ -40,6 +40,14 @@ SWCompress::SWCompress()
 }
 
 
+SWCompress::SWCompress(const SWCompress &other)
+{
+	buf = zbuf = 0;
+	level = other.level;
+	init();
+}
+
+
 /******************************************************************************
  * SWCompress Destructor - Cleans up instance of SWCompress
  */

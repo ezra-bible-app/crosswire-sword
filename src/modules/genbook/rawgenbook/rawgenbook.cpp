@@ -70,6 +70,17 @@ RawGenBook::RawGenBook(const char *ipath, const char *iname, const char *idesc, 
 }
 
 
+RawGenBook::RawGenBook(const RawGenBook &other) : SWGenBook(other) {
+	path = 0;
+	stdstr(&path, other.path);
+	verseKey = other.verseKey;
+	char *buf = new char [ strlen (path) + 20 ];
+	sprintf(buf, "%s.bdt", path);
+	bdtfd = FileMgr::getSystemFileMgr()->open(buf, FileMgr::RDWR, true);
+	delete [] buf;
+}
+
+
 /******************************************************************************
  * RawGenBook Destructor - Cleans up instance of RawGenBook
  */

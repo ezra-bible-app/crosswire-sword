@@ -37,6 +37,8 @@ class Private;
 public:
 	LZSSCompress ();
 	virtual ~LZSSCompress();
+	LZSSCompress(const LZSSCompress &other);
+	virtual SWCompress *clone() const { return new LZSSCompress(*this); }
 	virtual void encode(void);
 	virtual void decode(void);
 };

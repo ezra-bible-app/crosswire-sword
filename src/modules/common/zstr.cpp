@@ -56,8 +56,12 @@ const int zStr::ZDXENTRYSIZE = 8;
  * ENT:	ipath - path of the directory where data and index files are located.
  */
 
+zStr::zStr(const zStr &other) : zStr(other.path, other.fileMode, other.blockCount, other.compressor->clone(), other.caseSensitive) {}
+
+
 zStr::zStr(const char *ipath, int fileMode, long blockCount, SWCompress *icomp, bool caseSensitive) : caseSensitive(caseSensitive)
 {
+	this->fileMode = fileMode;
 	SWBuf buf;
 
 	lastoff = -1;

@@ -52,6 +52,9 @@ public:
 			const char *versification = "KJV");
 
 	virtual ~zText4();
+	/** copy, with its own file descriptors */
+	zText4(const zText4 &other) : zVerse4(other), SWText(other) { blockType = other.blockType; lastWriteKey = 0; }
+	virtual SWModule *clone() const { return new zText4(*this); }
 	virtual SWBuf &getRawEntryBuf() const;
 
 	virtual void increment(int steps = 1);

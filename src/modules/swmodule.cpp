@@ -130,6 +130,41 @@ SWModule::SWModule(const char *imodname, const char *imoddesc, SWDisplay *idisp,
 
 
 /******************************************************************************
+ * SWModule Copy Constructor
+ */
+
+SWModule::SWModule(const SWModule &other) {
+	key       = other.key ? other.key->clone() : createKey();
+	entryBuf  = "";
+	if (other.config == &other.ownConfig) { ownConfig = other.ownConfig; config = &ownConfig; }
+	else config = other.config;
+	modname   = 0;
+	moddesc   = 0;
+	modtype   = 0;
+	modlang   = 0;
+	stdstr(&modname, other.modname);
+	stdstr(&moddesc, other.moddesc);
+	stdstr(&modtype, other.modtype);
+	stdstr(&modlang, other.modlang);
+	error     = 0;
+	encoding  = other.encoding;
+	direction = other.direction;
+	markup    = other.markup;
+	entrySize = -1;
+	entryIndex = 0;
+	disp      = other.disp;
+	stripFilters    = new FilterList(*other.stripFilters);
+	rawFilters      = new FilterList(*other.rawFilters);
+	renderFilters   = new FilterList(*other.renderFilters);
+	optionFilters   = new OptionFilterList(*other.optionFilters);
+	encodingFilters = new FilterList(*other.encodingFilters);
+	skipConsecutiveLinks = other.skipConsecutiveLinks;
+	procEntAttr = other.procEntAttr;
+	terminateSearch = false;
+}
+
+
+/******************************************************************************
  * SWModule Destructor - Cleans up instance of SWModule
  */
 

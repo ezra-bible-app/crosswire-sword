@@ -38,6 +38,8 @@ class SWDLLEXPORT zVerse {
 	SWCompress *compressor;
 
 protected:
+	int fileMode;
+	int blockType;
 	static int instance;		// number of instantiated zVerse objects or derivitives
 
 	FileDesc *idxfp[2];
@@ -63,6 +65,8 @@ public:
 
 	// fileMode default = RDONLY
 	zVerse(const char *ipath, int fileMode = -1, int blockType = CHAPTERBLOCKS, SWCompress * icomp = 0);
+	/** copy, with its own file descriptors */
+	zVerse(const zVerse &other);
 	virtual ~zVerse();
 
 	void findOffset(char testmt, long idxoff, long *start, unsigned short *size, unsigned long *buffnum) const;

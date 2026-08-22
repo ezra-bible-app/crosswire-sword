@@ -39,6 +39,8 @@ private:
 public:
 	XzCompress();
 	virtual ~XzCompress();
+	XzCompress(const XzCompress &other) : SWCompress(other), memlimit(other.memlimit) {}
+	virtual SWCompress *clone() const { return new XzCompress(*this); }
 
 	virtual void encode(void);
 	virtual void decode(void);

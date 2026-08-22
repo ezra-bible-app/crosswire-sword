@@ -44,6 +44,9 @@ public:
 			SWTextMarkup markup = FMT_UNKNOWN, const char* ilang = 0, bool caseSensitive = false, bool strongsPadding = true);
 
 	virtual ~RawLD();
+	/** copy, with its own file descriptors */
+	RawLD(const RawLD &other) : RawStr(other), SWLD(other) {}
+	virtual SWModule *clone() const { return new RawLD(*this); }
 	virtual SWBuf &getRawEntryBuf() const;
 
 	virtual void increment(int steps = 1);

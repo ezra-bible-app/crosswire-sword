@@ -56,8 +56,12 @@ const int RawStr::IDXENTRYSIZE = 6;
  *		(e.g. 'modules/texts/rawtext/webster/')
  */
 
+RawStr::RawStr(const RawStr &other) : RawStr(other.path, other.fileMode, other.caseSensitive) {}
+
+
 RawStr::RawStr(const char *ipath, int fileMode, bool caseSensitive) : caseSensitive(caseSensitive)
 {
+	this->fileMode = fileMode;
 	SWBuf buf;
 
 	lastoff = -1;

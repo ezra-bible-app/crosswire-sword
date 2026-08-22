@@ -40,6 +40,9 @@ private:
 public:
 	HREFCom(const char *ipath, const char *prefix, const char *iname = 0, const char *idesc = 0, SWDisplay * idisp = 0);
 	virtual ~HREFCom();
+	/** copy, with its own file descriptors */
+	HREFCom(const HREFCom &other) : RawVerse(other), SWCom(other) { prefix = 0; stdstr(&prefix, other.prefix); }
+	virtual SWModule *clone() const { return new HREFCom(*this); }
 	virtual SWBuf &getRawEntryBuf() const;
 
 	// OPERATORS -----------------------------------------------------------------

@@ -46,6 +46,9 @@ public:
 			SWTextMarkup markup = FMT_UNKNOWN, const char *ilang = 0,
 			const char *versification = "KJV");
 	virtual ~zCom4();
+	/** copy, with its own file descriptors */
+	zCom4(const zCom4 &other) : zVerse4(other), SWCom(other) { blockType = other.blockType; lastWriteKey = 0; }
+	virtual SWModule *clone() const { return new zCom4(*this); }
 	virtual SWBuf &getRawEntryBuf() const;
 	virtual void increment(int steps = 1);
 	virtual void decrement(int steps = 1) { increment(-steps); }

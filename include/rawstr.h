@@ -35,6 +35,7 @@ class FileDesc;
 class SWDLLEXPORT RawStr {
 
 private:
+	int fileMode;
 	static int instance;		// number of instantiated RawStr objects or derivitives
 	char *path;
 	bool caseSensitive;
@@ -51,6 +52,8 @@ protected:
 public:
 	static const char nl;
 	RawStr(const char *ipath, int fileMode = -1, bool caseSensitive = false);
+	/** copy, with its own file descriptors */
+	RawStr(const RawStr &other);
 	virtual ~RawStr();
 	void getIDXBuf(long ioffset, char **buf) const;
 	void getIDXBufDat(long ioffset, char **buf) const;

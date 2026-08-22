@@ -71,6 +71,7 @@ public:
 			const char *versification = "KJV");
 
 	virtual ~SWCom();
+	SWCom(const SWCom &other);
 	virtual SWKey *createKey() const;
 
 	virtual long getIndex() const;

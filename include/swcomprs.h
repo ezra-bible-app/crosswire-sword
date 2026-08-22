@@ -42,6 +42,8 @@ protected:
 public:
 	SWCompress();
 	virtual ~SWCompress();
+	SWCompress(const SWCompress &other);
+	virtual SWCompress *clone() const { return new SWCompress(*this); }
 	virtual void setUncompressedBuf(const char *buf = 0, unsigned long *len = 0);
 	virtual char *getUncompressedBuf(unsigned long *len = 0);
 	virtual void setCompressedBuf(unsigned long *len, char *buf = 0);
