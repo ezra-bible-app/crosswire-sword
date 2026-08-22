@@ -107,10 +107,29 @@ public class SWORD extends CordovaPlugin {
 		});
 	}
 
-	public boolean execute(String action, JSONArray args, final CallbackContext callbackContext) throws JSONException {
-		synchronized (swordLock) {
-			return executeLocked(action, args, callbackContext);
-		}
+	public boolean execute(final String action, final JSONArray args, final CallbackContext callbackContext) throws JSONException {
+		// Every action runs on the thread pool under the lock, never on the
+		// UI thread: a long pool task (a search, a chapter render) would
+		// otherwise hold the lock while the UI thread waited on it for a
+		// translate() or a config lookup, freezing the screen.  Calls are
+		// asynchronous from JavaScript's side regardless; JS's own callback
+		// chains keep dependent calls in order.
+		runLocked(cordova, new Runnable() {
+			@Override
+			public void run() {
+				try {
+					if (!executeLocked(action, args, callbackContext)) callbackContext.error("unknown action: " + action);
+				}
+				catch (JSONException e) {
+					callbackContext.error("bad arguments for " + action + ": " + e);
+				}
+				catch (RuntimeException e) {
+					Log.e(TAG, "action " + action + " failed", e);
+					callbackContext.error(action + " failed: " + e);
+				}
+			}
+		});
+		return true;
 	}
 
 	private boolean executeLocked(String action, JSONArray args, final CallbackContext callbackContext) throws JSONException {
