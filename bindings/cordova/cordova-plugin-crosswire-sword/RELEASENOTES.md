@@ -20,6 +20,17 @@
 -->
 # Release Notes
 
+### 0.2.8 (Aug 22, 2026)
+* SWMgr.readFile/writeFile/listDir/removeFile/mkdir: plain file access through the engine's FileMgr, so paths in a shared (SAF) library work
+* SWMgr.getDataPath/getDataStorage/chooseDataStorage/clearDataStorage/describeTree: a separately granted study-data folder (e.g. on Google Drive) for bookmarks and the like
+* Android: writes to non-local document providers (Drive...) are staged and committed on close; such providers only accept content through a Java-side close
+* Android: all SWORD calls serialised through one lock (chapter rendering runs on the thread pool while re-initialisation runs on the main thread)
+* Android: default lexica re-resolved after augmenting modules (crash on the first Strong's render after choosing a shared library)
+
+### 0.2.7 (Aug 19, 2026)
+* SWMgr.getSharedStorage/chooseSharedStorage/clearSharedStorage: Android shared module library in a Storage Access Framework folder (e.g. Documents/sword) usable by several SWORD apps
+* makeRequest returns the error body on HTTP error statuses
+
 ### 0.2.4 (Dec 7, 2020)
 * Updated documentation
 
