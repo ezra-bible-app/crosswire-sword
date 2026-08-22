@@ -27,10 +27,19 @@ CSS:
 		.transChange.transChange-tenseChange { font-style: normal; }
 		.transChange:lang(zh) { font-style: normal; text-decoration: dotted underline; }
 		.overline { text-decoration: overline; }
-		.indent1 { margin-left: 1em; }
-		.indent2 { margin-left: 2em; }
-		.indent3 { margin-left: 3em; }
-		.indent4 { margin-left: 4em; }
+		/* poetry: each <l> is a block with a hanging indent, so a wrapped line
+		   is told apart from the next line; the verse number sits in the outdent */
+		.line { display: block; padding-left: 1.5em; text-indent: -1.5em; }
+		.line + br { display: none; }
+		.line.indent1 { padding-left: 2.5em; }
+		.line.indent2 { padding-left: 3.5em; }
+		.line.indent3 { padding-left: 4.5em; }
+		.line.indent4 { padding-left: 5.5em; }
+		.line.indent5 { padding-left: 6.5em; }
+		.indent1:not(.line) { margin-left: 1em; }
+		.indent2:not(.line) { margin-left: 2em; }
+		.indent3:not(.line) { margin-left: 3em; }
+		.indent4:not(.line) { margin-left: 4em; }
 		abbr { &:hover{ &:before{ content: attr(title); } } }
 		.small-caps { font-variant: small-caps; }
 		.otPassage { font-variant: small-caps; }
@@ -70,10 +79,19 @@ CSS:
 		.transChange.transChange-tenseChange { font-style: normal; }
 		.transChange:lang(zh) { font-style: normal; text-decoration: dotted underline; }
 		.overline { text-decoration: overline; }
-		.indent1 { margin-left: 1em; }
-		.indent2 { margin-left: 2em; }
-		.indent3 { margin-left: 3em; }
-		.indent4 { margin-left: 4em; }
+		/* poetry: each <l> is a block with a hanging indent, so a wrapped line
+		   is told apart from the next line; the verse number sits in the outdent */
+		.line { display: block; padding-left: 1.5em; text-indent: -1.5em; }
+		.line + br { display: none; }
+		.line.indent1 { padding-left: 2.5em; }
+		.line.indent2 { padding-left: 3.5em; }
+		.line.indent3 { padding-left: 4.5em; }
+		.line.indent4 { padding-left: 5.5em; }
+		.line.indent5 { padding-left: 6.5em; }
+		.indent1:not(.line) { margin-left: 1em; }
+		.indent2:not(.line) { margin-left: 2em; }
+		.indent3:not(.line) { margin-left: 3em; }
+		.indent4:not(.line) { margin-left: 4em; }
 		abbr { &:hover{ &:before{ content: attr(title); } } }
 		.small-caps { font-variant: small-caps; }
 		.otPassage { font-variant: small-caps; }
@@ -120,10 +138,19 @@ CSS:
 		.transChange.transChange-tenseChange { font-style: normal; }
 		.transChange:lang(zh) { font-style: normal; text-decoration: dotted underline; }
 		.overline { text-decoration: overline; }
-		.indent1 { margin-left: 1em; }
-		.indent2 { margin-left: 2em; }
-		.indent3 { margin-left: 3em; }
-		.indent4 { margin-left: 4em; }
+		/* poetry: each <l> is a block with a hanging indent, so a wrapped line
+		   is told apart from the next line; the verse number sits in the outdent */
+		.line { display: block; padding-left: 1.5em; text-indent: -1.5em; }
+		.line + br { display: none; }
+		.line.indent1 { padding-left: 2.5em; }
+		.line.indent2 { padding-left: 3.5em; }
+		.line.indent3 { padding-left: 4.5em; }
+		.line.indent4 { padding-left: 5.5em; }
+		.line.indent5 { padding-left: 6.5em; }
+		.indent1:not(.line) { margin-left: 1em; }
+		.indent2:not(.line) { margin-left: 2em; }
+		.indent3:not(.line) { margin-left: 3em; }
+		.indent4:not(.line) { margin-left: 4em; }
 		abbr { &:hover{ &:before{ content: attr(title); } } }
 		.small-caps { font-variant: small-caps; }
 		.otPassage { font-variant: small-caps; }
