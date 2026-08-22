@@ -581,6 +581,24 @@ Log.d(TAG, "... finished renderChapter");
 			((AndroidMgr)mgr).setSharedStorageUri(null);
 			callbackContext.success();
 		}
+		else if (action.equals("SWMgr_getGlobalOptions")) {
+			JSONArray r = new JSONArray();
+			for (String o : mgr.getGlobalOptions()) r.put(o);
+			callbackContext.success(r);
+		}
+		else if (action.equals("SWMgr_getGlobalOptionValues")) {
+			JSONArray r = new JSONArray();
+			for (String v : mgr.getGlobalOptionValues(args.getString(0))) r.put(v);
+			callbackContext.success(r);
+		}
+		else if (action.equals("SWMgr_getGlobalOption")) {
+			String v = mgr.getGlobalOption(args.getString(0));
+			callbackContext.success(v == null ? "" : v);
+		}
+		else if (action.equals("SWMgr_getGlobalOptionTip")) {
+			String v = mgr.getGlobalOptionTip(args.getString(0));
+			callbackContext.success(v == null ? "" : v);
+		}
 		else if (action.equals("SWMgr_setGlobalOption")) {
 			String option = args.getString(0);
 			String value = args.getString(1);

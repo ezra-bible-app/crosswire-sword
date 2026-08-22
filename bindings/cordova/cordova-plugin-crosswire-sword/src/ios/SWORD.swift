@@ -292,6 +292,37 @@ debugPrint("initMgr, mgr: " + String(describing: mgr))
     }
     
 
+    @objc(SWMgr_getGlobalOptions:)
+    func SWMgr_getGlobalOptions(command: CDVInvokedUrlCommand) {
+        initMgr()
+        let retVal = getStringArray(buffer: org_crosswire_sword_SWMgr_getGlobalOptions(mgr))
+        self.commandDelegate!.send(CDVPluginResult(status: CDVCommandStatus_OK, messageAs: retVal), callbackId: command.callbackId)
+    }
+
+    @objc(SWMgr_getGlobalOptionValues:)
+    func SWMgr_getGlobalOptionValues(command: CDVInvokedUrlCommand) {
+        initMgr()
+        let option = command.arguments[0] as? String ?? ""
+        let retVal = getStringArray(buffer: org_crosswire_sword_SWMgr_getGlobalOptionValues(mgr, option))
+        self.commandDelegate!.send(CDVPluginResult(status: CDVCommandStatus_OK, messageAs: retVal), callbackId: command.callbackId)
+    }
+
+    @objc(SWMgr_getGlobalOption:)
+    func SWMgr_getGlobalOption(command: CDVInvokedUrlCommand) {
+        initMgr()
+        let option = command.arguments[0] as? String ?? ""
+        let v = org_crosswire_sword_SWMgr_getGlobalOption(mgr, option)
+        self.commandDelegate!.send(CDVPluginResult(status: CDVCommandStatus_OK, messageAs: v == nil ? "" : String(cString:v!)), callbackId: command.callbackId)
+    }
+
+    @objc(SWMgr_getGlobalOptionTip:)
+    func SWMgr_getGlobalOptionTip(command: CDVInvokedUrlCommand) {
+        initMgr()
+        let option = command.arguments[0] as? String ?? ""
+        let v = org_crosswire_sword_SWMgr_getGlobalOptionTip(mgr, option)
+        self.commandDelegate!.send(CDVPluginResult(status: CDVCommandStatus_OK, messageAs: v == nil ? "" : String(cString:v!)), callbackId: command.callbackId)
+    }
+
     @objc(SWMgr_getPrefixPath:)
     func SWMgr_getPrefixPath(command: CDVInvokedUrlCommand) {
 

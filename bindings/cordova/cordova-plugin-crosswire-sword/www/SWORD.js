@@ -425,6 +425,38 @@ SWMgr.prototype.translate = function(text, locale, callback) {
 	);
 }
 
+// The engine's global text options ("Strong's Numbers", "Headings",
+// "Words of Christ in Red", ...): the names on offer given the installed
+// modules, the values each accepts ("On"/"Off" or a list), the current
+// value, and a one-line description.
+SWMgr.prototype.getGlobalOptions = function(callback) {
+	exec(callback?callback:function() {},
+		function(err) { if (callback) callback([]); },
+		"SWORD", "SWMgr_getGlobalOptions", []
+	);
+}
+
+SWMgr.prototype.getGlobalOptionValues = function(option, callback) {
+	exec(callback?callback:function() {},
+		function(err) { if (callback) callback([]); },
+		"SWORD", "SWMgr_getGlobalOptionValues", [option]
+	);
+}
+
+SWMgr.prototype.getGlobalOption = function(option, callback) {
+	exec(callback?callback:function() {},
+		function(err) { if (callback) callback(''); },
+		"SWORD", "SWMgr_getGlobalOption", [option]
+	);
+}
+
+SWMgr.prototype.getGlobalOptionTip = function(option, callback) {
+	exec(callback?callback:function() {},
+		function(err) { if (callback) callback(''); },
+		"SWORD", "SWMgr_getGlobalOptionTip", [option]
+	);
+}
+
 SWMgr.prototype.setGlobalOption = function(option, value, callback) {
 	exec(callback?callback:function() {},
 		function(err) { utils.alert('[ERROR] problem: ' + err); },
