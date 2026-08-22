@@ -6,6 +6,7 @@ MESSAGE(STATUS "\n-- CONFIGURING LIBRARY TESTS")
 SET(test_PROGRAMS
 	bibliotest
 	casttest
+	clonetest
 	ciphertest
 	complzss
 	compnone
