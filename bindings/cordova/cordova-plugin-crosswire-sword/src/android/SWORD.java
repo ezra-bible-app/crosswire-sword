@@ -91,7 +91,29 @@ public class SWORD extends CordovaPlugin {
 	* @param callbackContext   The callback id used when calling back into JavaScript.
 	* @return                  True if the action was valid, false if not.
 	*/
+	/**
+	 * libsword is not thread-safe, and a few actions run on the thread pool
+	 * (chapter rendering, searching, installing) while others -- including
+	 * re-initialization when the user picks a library folder -- run on the
+	 * main thread.  Every touch of the manager therefore takes this lock;
+	 * the one long-lived pool task (the BibleSync listener) stays outside it.
+	 */
+	private static final Object swordLock = new Object();
+
+	private static void runLocked(final CordovaInterface cordova, final Runnable r) {
+		cordova.getThreadPool().execute(new Runnable() {
+			@Override
+			public void run() { synchronized (swordLock) { r.run(); } }
+		});
+	}
+
 	public boolean execute(String action, JSONArray args, final CallbackContext callbackContext) throws JSONException {
+		synchronized (swordLock) {
+			return executeLocked(action, args, callbackContext);
+		}
+	}
+
+	private boolean executeLocked(String action, JSONArray args, final CallbackContext callbackContext) throws JSONException {
 		if (action.equals("initSWORD")) {
 			JSONObject r = new JSONObject();
 			r.put("version", mgr.version());
@@ -105,7 +127,7 @@ public class SWORD extends CordovaPlugin {
 			callbackContext.success();
 		}
 		else if (action.equals("InstallMgr_syncConfig")) {
-			cordova.getThreadPool().execute(new Runnable() {
+			runLocked(cordova, new Runnable() {
 				@Override
 				public void run() {
 					installMgr.syncConfig();
@@ -124,7 +146,7 @@ public class SWORD extends CordovaPlugin {
 		}
 		else if (action.equals("InstallMgr_refreshRemoteSource")) {
 			final String repo = args.getString(0);
-			cordova.getThreadPool().execute(new Runnable() {
+			runLocked(cordova, new Runnable() {
 				@Override
 				public void run() {
 					installMgr.refreshRemoteSource(repo);
@@ -170,7 +192,7 @@ public class SWORD extends CordovaPlugin {
 		else if (action.equals("InstallMgr_remoteInstallModule")) {
 			final String repo = args.getString(0);
 			final String modName = args.getString(1);
-			cordova.getThreadPool().execute(new Runnable() {
+			runLocked(cordova, new Runnable() {
 				private CallbackContext installReporterContext = callbackContext;
 				@Override
 				public void run() {
@@ -312,7 +334,7 @@ public class SWORD extends CordovaPlugin {
 			final int searchType = args.getInt(2);
 			final long flags = args.getLong(3);
 			final String scope = JSONObject.NULL.equals(args.getString(4)) || "null".equals(args.getString(4)) ? null : args.getString(4);
-			cordova.getThreadPool().execute(new Runnable() {
+			runLocked(cordova, new Runnable() {
 				private CallbackContext searchReporterContext = callbackContext;
 			    @Override
 			    public void run() {
@@ -366,7 +388,7 @@ Log.d(TAG, "SWModule_getRenderChapter");
 			if (masterMod == null) { callbackContext.error("couldn't find master module: " + args.getString(0)); return true; }
 			if (mod == null) { callbackContext.error("couldn't find module: " + args.getString(1)); return true; }
 
-			cordova.getThreadPool().execute(new Runnable() {
+			runLocked(cordova, new Runnable() {
 				private CallbackContext myThreadRenderChapterContext = callbackContext;
 			    @Override
 			    public void run() {
@@ -866,7 +888,7 @@ Log.i(TAG, "an exception occurred in makeRequest thread: " + e);
 		return null;
 	}
 	public static void sendVerse(final SWModule mod, final String verse[], final CordovaInterface cordova, final CordovaPlugin plugin) {
-		cordova.getThreadPool().execute(new Runnable() {
+		runLocked(cordova, new Runnable() {
 			public void run() {
 				String subject = mod.getKeyChildren()[SWModule.VERSEKEY_SHORTTEXT] + " (" + mod.getName() + ")";
 				String message = mod.getStripText() + " --" +subject;
@@ -891,7 +913,7 @@ Log.i(TAG, "an exception occurred in makeRequest thread: " + e);
 		case REQUEST_CHOOSE_SHARED_STORAGE:
 			String result = "";
 			if (resultCode == Activity.RESULT_OK && intent != null && intent.getData() != null) {
-				((AndroidMgr)mgr).setSharedStorageUri(intent.getData());
+				synchronized (swordLock) { ((AndroidMgr)mgr).setSharedStorageUri(intent.getData()); }
 				android.net.Uri uri = ((AndroidMgr)mgr).getSharedStorageUri();
 				result = (uri != null) ? uri.toString() : "";
 			}
@@ -903,7 +925,7 @@ Log.i(TAG, "an exception occurred in makeRequest thread: " + e);
 		case REQUEST_CHOOSE_DATA_STORAGE:
 			String dataResult = "";
 			if (resultCode == Activity.RESULT_OK && intent != null && intent.getData() != null) {
-				((AndroidMgr)mgr).setDataStorageUri(intent.getData());
+				synchronized (swordLock) { ((AndroidMgr)mgr).setDataStorageUri(intent.getData()); }
 				android.net.Uri duri = ((AndroidMgr)mgr).getDataStorageUri();
 				dataResult = (duri != null) ? duri.toString() : "";
 			}
