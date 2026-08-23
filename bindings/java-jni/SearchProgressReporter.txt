@@ -1,5 +1,0 @@
-Compiled from "SWModule.java"
-public interface org.crosswire.android.sword.SWModule$SearchProgressReporter {
-  public abstract void progressReport(int);
-    descriptor: (I)V
-}
