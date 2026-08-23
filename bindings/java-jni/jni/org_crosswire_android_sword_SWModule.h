@@ -129,6 +129,22 @@ JNIEXPORT jstring JNICALL Java_org_crosswire_android_sword_SWModule_getKeyParent
 
 /*
  * Class:     org_crosswire_android_sword_SWModule
+ * Method:    nativeClone
+ * Signature: ()J
+ */
+JNIEXPORT jlong JNICALL Java_org_crosswire_android_sword_SWModule_nativeClone
+  (JNIEnv *, jobject);
+
+/*
+ * Class:     org_crosswire_android_sword_SWModule
+ * Method:    nativeDispose
+ * Signature: (J)V
+ */
+JNIEXPORT void JNICALL Java_org_crosswire_android_sword_SWModule_nativeDispose
+  (JNIEnv *, jobject, jlong);
+
+/*
+ * Class:     org_crosswire_android_sword_SWModule
  * Method:    previous
  * Signature: ()V
  */
