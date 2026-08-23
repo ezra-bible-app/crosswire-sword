@@ -48,8 +48,10 @@ class SharedStorageFileOps : public sword::FileOps {
 	JavaVM *vm;
 	std::vector<Mount> mounts;
 	std::map<int, jobject> issued;	// fd -> storage which issued it (for close)
-	jclass fileInfoClass;		// global ref to SWMgr$FileInfo
+	// SWMgr$FileInfo's fields, taken from the first FileInfo object seen
+	// (FindClass from a pool thread may resolve a different loader's class)
 	jfieldID fName, fSize, fModTime, fIsDirectory;
+	void resolveFileInfo(JNIEnv *env, jobject fileInfo);
 	jmethodID mOpen, mStat, mList, mMkdir, mRemove, mClose;
 
 	JNIEnv *getEnv(bool &attached);

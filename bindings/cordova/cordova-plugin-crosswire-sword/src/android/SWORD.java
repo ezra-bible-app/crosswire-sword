@@ -92,39 +92,27 @@ public class SWORD extends CordovaPlugin {
 	* @return                  True if the action was valid, false if not.
 	*/
 	/**
-	 * libsword is not thread-safe.  Every touch of the manager happens on
-	 * this one thread, in the order requested: no lock, no chance of two
-	 * calls overlapping, no UI-thread call ever waiting on a long one, and
-	 * no pile of pool threads parked behind a search.  The two things which
-	 * must not queue stay off it: terminateSearch (it only raises the
-	 * engine's cancel flag, which the running search polls) and the
-	 * BibleSync listener (a long-lived thread of its own).
+	 * Every action runs on the thread pool, never on the UI thread.  The
+	 * long ones (chapter rendering, searching) work on their own clone of
+	 * the module, so nothing they do is visible to the module the app
+	 * reads from; the engine itself needs no other protection.
 	 */
-	private static final java.util.concurrent.ExecutorService swordThread =
-		java.util.concurrent.Executors.newSingleThreadExecutor(new java.util.concurrent.ThreadFactory() {
-			public Thread newThread(Runnable r) { Thread t = new Thread(r, "sword"); t.setDaemon(true); return t; }
-		});
+	private static void onPool(final CordovaInterface cordova, final Runnable r) {
+		cordova.getThreadPool().execute(r);
+	}
 
-	private static void runLocked(final CordovaInterface cordova, final Runnable r) {
-		swordThread.execute(r);
+	// the long actions were once spawned onto the pool from the UI thread;
+	// they are already on it now
+	private static void runInline(final CordovaInterface cordova, final Runnable r) {
+		r.run();
 	}
 
 	public boolean execute(final String action, final JSONArray args, final CallbackContext callbackContext) throws JSONException {
-		// Cancelling a search must not wait behind the search itself.
-		if (action.equals("SWModule_terminateSearch")) {
-			SWModule mod = mgr.getModuleByName(args.getString(0));
-			if (mod != null) mod.terminateSearch();
-			callbackContext.success();
-			return true;
-		}
-		// Everything else runs on the SWORD thread, in order, never on the
-		// UI thread.  Calls are asynchronous from JavaScript's side
-		// regardless; JS's own callback chains keep dependent calls in order.
-		runLocked(cordova, new Runnable() {
+		onPool(cordova, new Runnable() {
 			@Override
 			public void run() {
 				try {
-					if (!executeLocked(action, args, callbackContext)) callbackContext.error("unknown action: " + action);
+					if (!executeAction(action, args, callbackContext)) callbackContext.error("unknown action: " + action);
 				}
 				catch (JSONException e) {
 					callbackContext.error("bad arguments for " + action + ": " + e);
@@ -138,7 +126,7 @@ public class SWORD extends CordovaPlugin {
 		return true;
 	}
 
-	private boolean executeLocked(String action, JSONArray args, final CallbackContext callbackContext) throws JSONException {
+	private boolean executeAction(String action, JSONArray args, final CallbackContext callbackContext) throws JSONException {
 		if (action.equals("initSWORD")) {
 			JSONObject r = new JSONObject();
 			r.put("version", mgr.version());
@@ -152,7 +140,7 @@ public class SWORD extends CordovaPlugin {
 			callbackContext.success();
 		}
 		else if (action.equals("InstallMgr_syncConfig")) {
-			runLocked(cordova, new Runnable() {
+			runInline(cordova, new Runnable() {
 				@Override
 				public void run() {
 					installMgr.syncConfig();
@@ -171,7 +159,7 @@ public class SWORD extends CordovaPlugin {
 		}
 		else if (action.equals("InstallMgr_refreshRemoteSource")) {
 			final String repo = args.getString(0);
-			runLocked(cordova, new Runnable() {
+			runInline(cordova, new Runnable() {
 				@Override
 				public void run() {
 					installMgr.refreshRemoteSource(repo);
@@ -217,7 +205,7 @@ public class SWORD extends CordovaPlugin {
 		else if (action.equals("InstallMgr_remoteInstallModule")) {
 			final String repo = args.getString(0);
 			final String modName = args.getString(1);
-			runLocked(cordova, new Runnable() {
+			runInline(cordova, new Runnable() {
 				private CallbackContext installReporterContext = callbackContext;
 				@Override
 				public void run() {
@@ -359,7 +347,7 @@ public class SWORD extends CordovaPlugin {
 			final int searchType = args.getInt(2);
 			final long flags = args.getLong(3);
 			final String scope = JSONObject.NULL.equals(args.getString(4)) || "null".equals(args.getString(4)) ? null : args.getString(4);
-			runLocked(cordova, new Runnable() {
+			runInline(cordova, new Runnable() {
 				private CallbackContext searchReporterContext = callbackContext;
 			    @Override
 			    public void run() {
@@ -413,17 +401,22 @@ Log.d(TAG, "SWModule_getRenderChapter");
 			if (masterMod == null) { callbackContext.error("couldn't find master module: " + args.getString(0)); return true; }
 			if (mod == null) { callbackContext.error("couldn't find module: " + args.getString(1)); return true; }
 
-			runLocked(cordova, new Runnable() {
+			runInline(cordova, new Runnable() {
 				private CallbackContext myThreadRenderChapterContext = callbackContext;
 			    @Override
 			    public void run() {
 
 				JSONArray r = new JSONArray();
+				// our own instances: the app's modules keep their keys and
+				// may be used meanwhile
+				SWModule master = masterMod.clone(), m = (mod == masterMod) ? master : mod.clone();
 				try {
-Log.d(TAG, "... in spawned thread to renderChapter");
-					r = getRenderChapter(masterMod, mod);
-Log.d(TAG, "... finished renderChapter");
+					r = getRenderChapter(master != null ? master : masterMod, m != null ? m : mod);
 				} catch (JSONException e) { e.printStackTrace(); }
+				finally {
+					if (m != null && m != master) m.dispose();
+					if (master != null) master.dispose();
+				}
 				PluginResult result = new PluginResult(PluginResult.Status.OK, r);
 				result.setKeepCallback(false);
 				if (myThreadRenderChapterContext != null) {
@@ -931,7 +924,7 @@ Log.i(TAG, "an exception occurred in makeRequest thread: " + e);
 		return null;
 	}
 	public static void sendVerse(final SWModule mod, final String verse[], final CordovaInterface cordova, final CordovaPlugin plugin) {
-		runLocked(cordova, new Runnable() {
+		runInline(cordova, new Runnable() {
 			public void run() {
 				String subject = mod.getKeyChildren()[SWModule.VERSEKEY_SHORTTEXT] + " (" + mod.getName() + ")";
 				String message = mod.getStripText() + " --" +subject;
@@ -959,7 +952,7 @@ Log.i(TAG, "an exception occurred in makeRequest thread: " + e);
 				final android.net.Uri chosen = intent.getData();
 				final CallbackContext ctx = chooseSharedStorageContext;
 				chooseSharedStorageContext = null;
-				runLocked(cordova, new Runnable() {
+				runInline(cordova, new Runnable() {
 					@Override
 					public void run() {
 						((AndroidMgr)mgr).setSharedStorageUri(chosen);
@@ -980,7 +973,7 @@ Log.i(TAG, "an exception occurred in makeRequest thread: " + e);
 				final android.net.Uri chosenData = intent.getData();
 				final CallbackContext dctx = chooseDataStorageContext;
 				chooseDataStorageContext = null;
-				runLocked(cordova, new Runnable() {
+				runInline(cordova, new Runnable() {
 					@Override
 					public void run() {
 						((AndroidMgr)mgr).setDataStorageUri(chosenData);

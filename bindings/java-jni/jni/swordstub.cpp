@@ -23,6 +23,7 @@
 #include <iostream>
 #include <vector>
 #include <map>
+#include <mutex>
 
 #include <jni.h>
 #include <android/log.h>
@@ -48,6 +49,8 @@
 
 #include "webmgr.hpp"
 #include "sharedstoragefileops.hpp"
+
+
 #include "org_crosswire_android_sword_SWMgr.h"
 #include "org_crosswire_android_sword_SWModule.h"
 #include "org_crosswire_android_sword_InstallMgr.h"
@@ -61,6 +64,9 @@ using namespace sword;
 
 namespace {
     bool firstInit = true;
+    // the manager is created once and replaced on reInit; either may be
+    // reached from several threads at once, and must not overlap
+    std::recursive_mutex initMutex;
     bool setupStorage = true;	// create a basic library config where there is none; reset by reInit
     bool firstInstallInit = true;
     JavaVM *javaVM = nullptr;
@@ -228,6 +234,7 @@ namespace {
 }
 static void init(JNIEnv *env) {
 
+	std::lock_guard<std::recursive_mutex> lock(initMutex);
 	if (firstInit) {
 
 		searchFilterValues.insert(SearchFilterValuesType::value_type("Greek Accents", "Off"));
@@ -417,6 +424,7 @@ JNIEXPORT jstring JNICALL Java_org_crosswire_android_sword_SWMgr_version
 JNIEXPORT void JNICALL Java_org_crosswire_android_sword_SWMgr_reInit
 		(JNIEnv *env, jobject me) {
 
+	std::lock_guard<std::recursive_mutex> lock(initMutex);
 	jclass swmgrClass = env->GetObjectClass(me);
 	jmethodID getStorageBasePath = env->GetMethodID(swmgrClass, "getStorageBasePath", "()Ljava/lang/String;");
 	jstring basePathJS = (jstring)env->CallObjectMethod(me, getStorageBasePath);
@@ -1221,6 +1229,15 @@ JNIEXPORT jboolean JNICALL Java_org_crosswire_android_sword_SWMgr_mkdir
 
 // SWModule methods ----------------------------------------------------------------------------------
 
+// A search runs on its own clone of the module, so the module the app
+// reads from is untouched while the search moves through the text.
+// terminateSearch must reach that clone: the clones searching right now,
+// by module name.
+#include <mutex>
+static std::mutex searchingMutex;
+static std::multimap<SWBuf, SWModule *> searching;
+
+
 
 SWModule *getModule
 		(JNIEnv *env, jobject me) {
@@ -1229,6 +1246,9 @@ SWModule *getModule
 
 	SWModule *module = nullptr;
 	jclass clazzSWModule = env->FindClass("org/crosswire/android/sword/SWModule");
+	// a clone carries its own native object
+	jlong handle = env->GetLongField(me, env->GetFieldID(clazzSWModule, "cloneHandle", "J"));
+	if (handle) return (SWModule *)(intptr_t)handle;
 	jfieldID fieldID = env->GetFieldID(clazzSWModule, "name", "Ljava/lang/String;");
 	jfieldID sourceFieldID = env->GetFieldID(clazzSWModule, "remoteSourceName", "Ljava/lang/String;");
 	jstring modNameJS = (jstring)env->GetObjectField(me, fieldID);
@@ -1251,6 +1271,22 @@ SWModule *getModule
 	if (sourceName) env->ReleaseStringUTFChars(sourceNameJS, sourceName);
 
 	return module;
+}
+
+JNIEXPORT jlong JNICALL Java_org_crosswire_android_sword_SWModule_nativeClone
+		(JNIEnv *env, jobject me) {
+
+	init(env);
+
+	SWModule *module = getModule(env, me);
+	SWModule *c = module ? module->clone() : nullptr;
+	return (jlong)(intptr_t)c;
+}
+
+JNIEXPORT void JNICALL Java_org_crosswire_android_sword_SWModule_nativeDispose
+		(JNIEnv *env, jobject me, jlong handle) {
+
+	delete (SWModule *)(intptr_t)handle;
 }
 
 /*
@@ -1365,6 +1401,9 @@ JNIEXPORT void JNICALL Java_org_crosswire_android_sword_SWModule_terminateSearch
 
 	if (module) {
 		module->terminateSearch = true;
+		std::lock_guard<std::mutex> lock(searchingMutex);
+		std::pair<std::multimap<SWBuf, SWModule *>::iterator, std::multimap<SWBuf, SWModule *>::iterator> range = searching.equal_range(SWBuf(module->getName()));
+		for (std::multimap<SWBuf, SWModule *>::iterator it = range.first; it != range.second; ++it) it->second->terminateSearch = true;
 	}
 }
 
@@ -1958,7 +1997,13 @@ JNIEXPORT jobjectArray JNICALL Java_org_crosswire_android_sword_SWModule_search
 	jclass clazzSearchHit = env->FindClass("org/crosswire/android/sword/SWModule$SearchHit");
 	jobjectArray ret = nullptr;
 
-	SWModule *module = getModule(env, me);
+	SWModule *original = getModule(env, me);
+	SWModule *module = original ? original->clone() : nullptr;
+	if (original && !module) module = original;		// a driver without clone(): search the original
+	if (module != original) {
+		std::lock_guard<std::mutex> lock(searchingMutex);
+		searching.insert(std::make_pair(SWBuf(module->getName()), module));
+	}
 
 	// TODO: remove this from the stack
 	pu *peeuuu = new pu(env, progressReporter);
@@ -2034,6 +2079,16 @@ JNIEXPORT jobjectArray JNICALL Java_org_crosswire_android_sword_SWModule_search
 
 	if (scope) env->ReleaseStringUTFChars(scopeJS, scope);
 	env->ReleaseStringUTFChars(expressionJS, expression);
+
+	if (module && module != original) {
+		{
+			std::lock_guard<std::mutex> lock(searchingMutex);
+			for (std::multimap<SWBuf, SWModule *>::iterator it = searching.begin(); it != searching.end(); ++it) {
+				if (it->second == module) { searching.erase(it); break; }
+			}
+		}
+		delete module;
+	}
 
 	return (ret) ? ret : (jobjectArray) env->NewObjectArray(0, clazzSearchHit, nullptr);
 }
@@ -2484,7 +2539,7 @@ JNIEXPORT void JNICALL Java_org_crosswire_android_sword_SWMgr_stopBibleSync
 
 jint JNI_OnLoad(JavaVM *vm, void *reserved) {
 	javaVM = vm;
-	return JNI_VERSION_1_2;
+	return JNI_VERSION_1_6;
 }
 
 void JNI_OnUnload(JavaVM *vm, void *reserved) {

@@ -22,6 +22,7 @@
 #include <string.h>
 #include <swlog.h>
 #include "sharedstoragefileops.hpp"
+#include <mutex>
 
 using namespace sword;
 
@@ -39,6 +40,7 @@ namespace {
 
 SharedStorageFileOps::SharedStorageFileOps(JNIEnv *env) {
 	env->GetJavaVM(&vm);
+	fName = fSize = fModTime = fIsDirectory = nullptr;
 
 	jclass clazz = env->FindClass("org/crosswire/android/sword/SWMgr$SharedStorage");
 	mOpen   = env->GetMethodID(clazz, "open",   "(Ljava/lang/String;Ljava/lang/String;Z)I");
@@ -49,12 +51,19 @@ SharedStorageFileOps::SharedStorageFileOps(JNIEnv *env) {
 	mClose  = env->GetMethodID(clazz, "close",  "(I)Z");
 	env->DeleteLocalRef(clazz);
 
-	jclass fi = env->FindClass("org/crosswire/android/sword/SWMgr$FileInfo");
-	fileInfoClass = (jclass)env->NewGlobalRef(fi);
-	fName        = env->GetFieldID(fi, "name", "Ljava/lang/String;");
+}
+
+
+void SharedStorageFileOps::resolveFileInfo(JNIEnv *env, jobject fileInfo) {
+	static std::mutex m;
+	std::lock_guard<std::mutex> lock(m);
+	if (fName) return;
+	jclass fi = env->GetObjectClass(fileInfo);
+	jfieldID n = env->GetFieldID(fi, "name", "Ljava/lang/String;");
 	fSize        = env->GetFieldID(fi, "size", "J");
 	fModTime     = env->GetFieldID(fi, "modTime", "J");
 	fIsDirectory = env->GetFieldID(fi, "isDirectory", "Z");
+	fName = n;		// last: readers test fName
 	env->DeleteLocalRef(fi);
 }
 
@@ -64,7 +73,6 @@ SharedStorageFileOps::~SharedStorageFileOps() {
 	JNIEnv *env = getEnv(attached);
 	if (env) {
 		for (size_t i = 0; i < mounts.size(); ++i) env->DeleteGlobalRef(mounts[i].storage);
-		env->DeleteGlobalRef(fileInfoClass);
 	}
 	if (attached) vm->DetachCurrentThread();
 }
@@ -110,6 +118,7 @@ jobject SharedStorageFileOps::rel(const char *path, SWBuf &rel) {
 
 
 void SharedStorageFileOps::toEntry(JNIEnv *env, jobject fileInfo, DirEntry *entry) {
+	resolveFileInfo(env, fileInfo);
 	jstring name = (jstring)env->GetObjectField(fileInfo, fName);
 	entry->name = jstr(env, name);
 	if (name) env->DeleteLocalRef(name);

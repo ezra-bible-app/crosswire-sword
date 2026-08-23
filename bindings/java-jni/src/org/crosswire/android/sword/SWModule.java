@@ -30,6 +30,8 @@ public class SWModule {
 	
 	// if this is a shell module from a remote source...
 	private String remoteSourceName;
+	/** native SWModule* of a clone (see clone()); 0 for the manager's module */
+	private long cloneHandle = 0;
 
 
 	public static final int SEARCHTYPE_REGEX     =  1;
@@ -88,6 +90,26 @@ public class SWModule {
 	public String               getDescription()	{ return description; }
 	public String               getCategory()	{ return category; }
 	public String               getRemoteSourceName()	{ return remoteSourceName; }
+
+	/**
+	 * An independent instance of this module for use from another thread
+	 * (SWModule::clone).  Every method of the returned object works on the
+	 * clone.  Call dispose() when done; null if the driver can't clone.
+	 */
+	public SWModule             clone() {
+		long h = nativeClone();
+		if (h == 0) return null;
+		SWModule c = new SWModule(name, remoteSourceName);
+		c.cloneHandle = h;
+		return c;
+	}
+	/** free a clone; the object must not be used afterwards */
+	public void                 dispose() {
+		if (cloneHandle != 0) { nativeDispose(cloneHandle); cloneHandle = 0; }
+	}
+	public boolean              isClone()		{ return cloneHandle != 0; }
+	private native long         nativeClone();
+	private native void         nativeDispose(long handle);
 	public native void          previous();
 	public native void          next();
 	public native void          begin();
