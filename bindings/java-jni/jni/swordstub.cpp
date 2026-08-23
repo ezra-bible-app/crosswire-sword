@@ -24,6 +24,7 @@
 #include <vector>
 #include <map>
 #include <mutex>
+#include <deque>
 
 #include <jni.h>
 #include <android/log.h>
@@ -64,13 +65,22 @@ using namespace sword;
 
 namespace {
     bool firstInit = true;
-    // the manager is created once and replaced on reInit; either may be
-    // reached from several threads at once, and must not overlap
+    // creating a manager, or retiring one, is the one thing two threads
+    // must not do at once
     std::recursive_mutex initMutex;
     bool setupStorage = true;	// create a basic library config where there is none; reset by reInit
     bool firstInstallInit = true;
     JavaVM *javaVM = nullptr;
     WebMgr *mgr = nullptr;
+    // Re-initialisation builds a new manager and keeps the last few old
+    // ones alive: a clone made from an old manager (a render or a search
+    // still running) shares that manager's config and filters, and is
+    // long finished by the time its manager reaches the back of the
+    // carousel.  No registry of clones, no waiting.
+    std::deque<WebMgr *> retiredMgrs;
+    const size_t RETIRED_MGRS = 3;
+    // installed once; reInit only changes its mounts
+    SharedStorageFileOps *fileOps = nullptr;
     InstallMgr *installMgr = nullptr;
 
 #ifdef BIBLESYNC
@@ -320,6 +330,7 @@ SWLOGI("libsword: init() end.");
 
 void initInstall(JNIEnv *env, jobject progressReporter = nullptr) {
 
+	std::lock_guard<std::recursive_mutex> lock(initMutex);
 	if (!installStatusReporter) {
 		installStatusReporter = new InstallStatusReporter();
 	}
@@ -434,35 +445,28 @@ JNIEXPORT void JNICALL Java_org_crosswire_android_sword_SWMgr_reInit
 	env->ReleaseStringUTFChars(basePathJS, basePath);
 SWLOGI("setting STORAGE_BASE to: %s", STORAGE_BASE.c_str());
 
-	// route SHARED_STORAGE_PATH to the app's SharedStorage (the shared
+	// SHARED_STORAGE_PATH routes to the app's SharedStorage (the shared
 	// module library) and DATA_STORAGE_PATH to its DataStorage (the
-	// study-data folder: bookmarks etc.), whichever it offers; otherwise
-	// plain paths only
-	SharedStorageFileOps *ops = new SharedStorageFileOps(env);
+	// study-data folder: bookmarks etc.), whichever it offers now
+	if (!fileOps) { fileOps = new SharedStorageFileOps(env); FileMgr::setSystemFileOps(fileOps); }
 	jmethodID getSharedStorage = env->GetMethodID(swmgrClass, "getSharedStorage", "()Lorg/crosswire/android/sword/SWMgr$SharedStorage;");
 	jobject storage = env->CallObjectMethod(me, getSharedStorage);
-	sharedStorage = false;
-	if (storage) {
-SWLOGI("installing SharedStorageFileOps at %s", SHARED_STORAGE_PATH);
-		ops->addMount(env, SHARED_STORAGE_PATH, storage);
-		env->DeleteLocalRef(storage);
-		sharedStorage = true;
-	}
+	fileOps->setMount(env, SHARED_STORAGE_PATH, storage);
+	sharedStorage = (storage != nullptr);
+	if (storage) env->DeleteLocalRef(storage);
 	jmethodID getDataStorage = env->GetMethodID(swmgrClass, "getDataStorage", "()Lorg/crosswire/android/sword/SWMgr$SharedStorage;");
 	jobject dataStorage = env->CallObjectMethod(me, getDataStorage);
-	dataStorageMounted = false;
-	if (dataStorage) {
-SWLOGI("installing DataStorage at %s", DATA_STORAGE_PATH);
-		ops->addMount(env, DATA_STORAGE_PATH, dataStorage);
-		env->DeleteLocalRef(dataStorage);
-		dataStorageMounted = true;
-	}
-	if (ops->hasMounts()) FileMgr::setSystemFileOps(ops);
-	else { delete ops; FileMgr::setSystemFileOps(new FileOps()); }
+	fileOps->setMount(env, DATA_STORAGE_PATH, dataStorage);
+	dataStorageMounted = (dataStorage != nullptr);
+	if (dataStorage) env->DeleteLocalRef(dataStorage);
 	setupStorage = true;		// create a basic config in the new location if there is none
 	firstInstallInit = true;
 
-	delete mgr;
+	// the manager retires rather than dies: see retiredMgrs
+	if (mgr) {
+		retiredMgrs.push_back(mgr);
+		while (retiredMgrs.size() > RETIRED_MGRS) { delete retiredMgrs.front(); retiredMgrs.pop_front(); }
+	}
 	mgr = nullptr;
 	delete installMgr;
 	installMgr = nullptr;
@@ -1997,6 +2001,9 @@ JNIEXPORT jobjectArray JNICALL Java_org_crosswire_android_sword_SWModule_search
 	jclass clazzSearchHit = env->FindClass("org/crosswire/android/sword/SWModule$SearchHit");
 	jobjectArray ret = nullptr;
 
+	// the manager the clone belongs to: a reInit meanwhile retires it but
+	// keeps it alive (see retiredMgrs)
+	WebMgr *myMgr = mgr;
 	SWModule *original = getModule(env, me);
 	SWModule *module = original ? original->clone() : nullptr;
 	if (original && !module) module = original;		// a driver without clone(): search the original
@@ -2029,17 +2036,17 @@ JNIEXPORT jobjectArray JNICALL Java_org_crosswire_android_sword_SWModule_search
 		// setup our option filters for strip mode; TODO: this sucks.  We need a second occurrence these filters set to their strip values
 		SearchFilterValuesType currentFilterValues;
 		for (SearchFilterValuesType::const_iterator it = searchFilterValues.begin(); it != searchFilterValues.end(); ++it) {
-			currentFilterValues.insert(SearchFilterValuesType::value_type(it->first, mgr->getGlobalOption(it->first)));
+			currentFilterValues.insert(SearchFilterValuesType::value_type(it->first, myMgr->getGlobalOption(it->first)));
 		}
 		for (SearchFilterValuesType::const_iterator it = searchFilterValues.begin(); it != searchFilterValues.end(); ++it) {
-			mgr->setGlobalOption(it->first, it->second);
+			myMgr->setGlobalOption(it->first, it->second);
 		}
 
         SWBuf searchTerm = module->stripText(expression);
         result = module->search(searchTerm.c_str(), srchType, flags, lscope, nullptr, &percentUpdate, peeuuu);
 
 		for (SearchFilterValuesType::const_iterator it = currentFilterValues.begin(); it != currentFilterValues.end(); ++it) {
-			mgr->setGlobalOption(it->first, it->second);
+			myMgr->setGlobalOption(it->first, it->second);
 		}
 
 		delete peeuuu;
@@ -2106,6 +2113,7 @@ JNIEXPORT jobjectArray JNICALL Java_org_crosswire_android_sword_SWModule_search
 JNIEXPORT void JNICALL Java_org_crosswire_android_sword_InstallMgr_reInit
 		(JNIEnv *env, jobject me) {
 
+	std::lock_guard<std::recursive_mutex> lock(initMutex);
 	delete installMgr;
 	installMgr = nullptr;
 }
@@ -2118,6 +2126,8 @@ JNIEXPORT void JNICALL Java_org_crosswire_android_sword_InstallMgr_reInit
  */
 JNIEXPORT jint JNICALL Java_org_crosswire_android_sword_InstallMgr_syncConfig
 		(JNIEnv *env, jobject me) {
+
+	init(env);
 
 	initInstall(env);
 
@@ -2162,6 +2172,8 @@ SWLOGI("uninstallModule %s\n", modName);
 JNIEXPORT jobjectArray JNICALL Java_org_crosswire_android_sword_InstallMgr_getRemoteSources
 		(JNIEnv *env, jobject me) {
 
+	init(env);
+
 	initInstall(env);
 
 	jclass clazzString = env->FindClass("java/lang/String");
@@ -2191,6 +2203,8 @@ SWLOGI("getRemoteSources: count: %d\n", count);
  */
 JNIEXPORT jint JNICALL Java_org_crosswire_android_sword_InstallMgr_refreshRemoteSource
 		(JNIEnv *env, jobject me, jstring sourceNameJS) {
+
+	init(env);
 
 	initInstall(env);
 
@@ -2372,6 +2386,8 @@ SWLOGI("remoteInstallModule: modName: %s\n", modName);
 JNIEXPORT jobject JNICALL Java_org_crosswire_android_sword_InstallMgr_getRemoteModuleByName
 		(JNIEnv *env, jobject me, jstring sourceNameJS, jstring modNameJS) {
 
+	init(env);
+
 	jobject retVal = nullptr;
 
 	initInstall(env);
@@ -2421,6 +2437,8 @@ SWLOGI("Couldn't find remote source [%s]\n", sourceName.c_str());
  */
 JNIEXPORT void JNICALL Java_org_crosswire_android_sword_InstallMgr_setUserDisclaimerConfirmed
 		(JNIEnv *env, jobject me) {
+
+	init(env);
 
 	initInstall(env);
 
@@ -2546,5 +2564,6 @@ void JNI_OnUnload(JavaVM *vm, void *reserved) {
 	delete bibleSync;
 	delete installMgr;
 	delete mgr;
+	while (!retiredMgrs.empty()) { delete retiredMgrs.front(); retiredMgrs.pop_front(); }
 }
 

@@ -35,11 +35,11 @@
 
 #include <vector>
 #include <map>
+#include <mutex>
 
 /** Routes each mounted prefix to its own SWMgr.SharedStorage; any path
- * not under a mount goes to the plain OS FileOps.  Several mounts may be
- * live at once, e.g. the shared module library and a separately granted
- * study-data folder. */
+ * not under a mount goes to the plain OS FileOps.  Installed once; the
+ * mounts change as the user picks folders. */
 class SharedStorageFileOps : public sword::FileOps {
 	struct Mount {
 		sword::SWBuf prefix;
@@ -47,6 +47,7 @@ class SharedStorageFileOps : public sword::FileOps {
 	};
 	JavaVM *vm;
 	std::vector<Mount> mounts;
+	mutable std::mutex mountsMutex;
 	std::map<int, jobject> issued;	// fd -> storage which issued it (for close)
 	// SWMgr$FileInfo's fields, taken from the first FileInfo object seen
 	// (FindClass from a pool thread may resolve a different loader's class)
@@ -55,9 +56,14 @@ class SharedStorageFileOps : public sword::FileOps {
 	jmethodID mOpen, mStat, mList, mMkdir, mRemove, mClose;
 
 	JNIEnv *getEnv(bool &attached);
-	// fills rel with the store-relative path and returns the mount's storage
-	// if path is under one, else nullptr
+	// fills rel with the store-relative path and returns a new global ref to
+	// the mount's storage if path is under one (release with Held), else 0
 	jobject rel(const char *path, sword::SWBuf &rel);
+	struct Held {
+		SharedStorageFileOps *ops; jobject storage;
+		Held(SharedStorageFileOps *o, jobject s) : ops(o), storage(s) {}
+		~Held();
+	};
 	void toEntry(JNIEnv *env, jobject fileInfo, sword::DirEntry *entry);
 
 public:
@@ -66,9 +72,10 @@ public:
 	virtual ~SharedStorageFileOps();
 
 	/** route paths under prefix (e.g. SHARED_STORAGE_PATH) to storage, a
-	 * SWMgr.SharedStorage (local ref is fine; a global ref is taken) */
-	void addMount(JNIEnv *env, const char *prefix, jobject storage);
-	bool hasMounts() const { return !mounts.empty(); }
+	 * SWMgr.SharedStorage (local ref is fine; a global ref is taken), or to
+	 * nothing with storage == 0; replaces any mount at that prefix */
+	void setMount(JNIEnv *env, const char *prefix, jobject storage);
+	bool hasMount(const char *prefix) const;
 
 	virtual int open(const char *path, int mode, int perms);
 	virtual bool hasAccess(const char *path, int mode);

@@ -92,13 +92,35 @@ public class SWORD extends CordovaPlugin {
 	* @return                  True if the action was valid, false if not.
 	*/
 	/**
-	 * Every action runs on the thread pool, never on the UI thread.  The
+	 * Every action runs on the thread pool, never on the UI thread.  A
+	 * module is stateful (its key, its entry), so actions on the same
+	 * module run one at a time in the order requested; actions on
+	 * different modules, and manager-level actions, run in parallel.  The
 	 * long ones (chapter rendering, searching) work on their own clone of
-	 * the module, so nothing they do is visible to the module the app
-	 * reads from; the engine itself needs no other protection.
+	 * the module.
 	 */
+	private static final java.util.Map<String, java.util.concurrent.locks.ReentrantLock> moduleLocks = new java.util.HashMap<String, java.util.concurrent.locks.ReentrantLock>();
+
+	private static java.util.concurrent.locks.ReentrantLock moduleLock(String name) {
+		synchronized (moduleLocks) {
+			java.util.concurrent.locks.ReentrantLock l = moduleLocks.get(name);
+			if (l == null) { l = new java.util.concurrent.locks.ReentrantLock(true); moduleLocks.put(name, l); }
+			return l;
+		}
+	}
+
 	private static void onPool(final CordovaInterface cordova, final Runnable r) {
 		cordova.getThreadPool().execute(r);
+	}
+
+	/** run r on the pool, holding the named module's lock if there is one */
+	private static void onPool(final CordovaInterface cordova, final String module, final Runnable r) {
+		if (module == null) { onPool(cordova, r); return; }
+		final java.util.concurrent.locks.ReentrantLock lock = moduleLock(module);
+		cordova.getThreadPool().execute(new Runnable() {
+			@Override
+			public void run() { lock.lock(); try { r.run(); } finally { lock.unlock(); } }
+		});
 	}
 
 	// the long actions were once spawned onto the pool from the UI thread;
@@ -108,7 +130,9 @@ public class SWORD extends CordovaPlugin {
 	}
 
 	public boolean execute(final String action, final JSONArray args, final CallbackContext callbackContext) throws JSONException {
-		onPool(cordova, new Runnable() {
+		// SWModule_* actions name their module first; terminateSearch must not queue
+		final String module = (action.startsWith("SWModule_") && !action.equals("SWModule_terminateSearch") && args.length() > 0) ? args.getString(0) : null;
+		onPool(cordova, module, new Runnable() {
 			@Override
 			public void run() {
 				try {
@@ -347,7 +371,9 @@ public class SWORD extends CordovaPlugin {
 			final int searchType = args.getInt(2);
 			final long flags = args.getLong(3);
 			final String scope = JSONObject.NULL.equals(args.getString(4)) || "null".equals(args.getString(4)) ? null : args.getString(4);
-			runInline(cordova, new Runnable() {
+			// the search runs on its own clone (made in JNI), so it leaves
+			// the module's lock: the app keeps using the module meanwhile
+			onPool(cordova, new Runnable() {
 				private CallbackContext searchReporterContext = callbackContext;
 			    @Override
 			    public void run() {
@@ -401,15 +427,16 @@ Log.d(TAG, "SWModule_getRenderChapter");
 			if (masterMod == null) { callbackContext.error("couldn't find master module: " + args.getString(0)); return true; }
 			if (mod == null) { callbackContext.error("couldn't find module: " + args.getString(1)); return true; }
 
-			runInline(cordova, new Runnable() {
+			// clone under the module's lock (we hold it here), then render
+			// on clones with the lock released: the app's modules keep their
+			// keys and may be used meanwhile
+			final SWModule master = masterMod.clone(), m = (mod == masterMod) ? master : mod.clone();
+			onPool(cordova, new Runnable() {
 				private CallbackContext myThreadRenderChapterContext = callbackContext;
 			    @Override
 			    public void run() {
 
 				JSONArray r = new JSONArray();
-				// our own instances: the app's modules keep their keys and
-				// may be used meanwhile
-				SWModule master = masterMod.clone(), m = (mod == masterMod) ? master : mod.clone();
 				try {
 					r = getRenderChapter(master != null ? master : masterMod, m != null ? m : mod);
 				} catch (JSONException e) { e.printStackTrace(); }
