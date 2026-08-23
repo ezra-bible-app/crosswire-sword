@@ -107,6 +107,9 @@ SWModule.prototype.SEARCHTYPE_ENTRYATTR = -3;
 SWModule.prototype.SEARCHTYPE_LUCENE    = -4;
 
 SWModule.prototype.SEARCHOPTION_ICASE   = 2;
+// search flags (SWModule::SEARCHFLAG_*)
+SWModule.prototype.SEARCHFLAG_MATCHWHOLEENTRY  = 4096;	// entry-attribute searches: the whole value, not a substring
+SWModule.prototype.SEARCHFLAG_STRICTBOUNDARIES = 8192;	// multiword/regex: no hits across verse boundaries
 
 
 SWModule.prototype.setKeyText = function(keyText, callback) {
