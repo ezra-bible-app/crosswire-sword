@@ -467,6 +467,11 @@ SWMgr.prototype.setGlobalOption = function(option, value, callback) {
 	);
 }
 
+// the sword:// or bible:// link the app was opened with, once; '' when none
+SWMgr.prototype.getLaunchUrl = function(callback) {
+	exec(callback, function(err) { utils.alert('[ERROR] problem: ' + err); }, "SWORD", "SWMgr_getLaunchUrl", []);
+}
+
 SWMgr.prototype.getPrefixPath = function(callback) {
 	exec(callback?callback:function() {},
 		function(err) { utils.alert('[ERROR] problem: ' + err); },

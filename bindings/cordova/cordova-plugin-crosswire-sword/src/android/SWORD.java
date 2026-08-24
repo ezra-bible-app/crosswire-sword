@@ -73,8 +73,30 @@ public class SWORD extends CordovaPlugin {
 	* @param cordova The context of the main Activity.
 	* @param webView The CordovaWebView Cordova is running in.
 	*/
+	// a sword:// or bible:// link the app was opened with, held until the
+	// page asks for it (SWMgr_getLaunchUrl)
+	private static String launchUrl = null;
+
+	private static String deepLink(Intent intent) {
+		if (intent == null || intent.getData() == null) return null;
+		String scheme = intent.getData().getScheme();
+		if (!"sword".equals(scheme) && !"bible".equals(scheme)) return null;
+		return intent.getDataString();
+	}
+
+	@Override
+	public void onNewIntent(Intent intent) {
+		final String url = deepLink(intent);
+		if (url == null) return;
+		launchUrl = url;
+		cordova.getActivity().runOnUiThread(new Runnable() { public void run() {
+			webView.getEngine().evaluateJavascript("if (window.swordDeepLink) swordDeepLink(" + org.json.JSONObject.quote(url) + ");", null);
+		}});
+	}
+
 	public void initialize(CordovaInterface cordova, CordovaWebView webView) {
 		super.initialize(cordova, webView);
+		launchUrl = deepLink(cordova.getActivity().getIntent());
 		mgr = new AndroidMgr(cordova.getActivity().getApplication());
 		installMgr = new InstallMgr();
 		if (android.os.Build.VERSION.SDK_INT > 9) {
@@ -534,6 +556,11 @@ Log.d(TAG, "SWModule_getRenderChapter");
 			String locale = args.getString(1);
 			String translated = mgr.translate(text, locale);
 			callbackContext.success(translated);
+		}
+		else if (action.equals("SWMgr_getLaunchUrl")) {
+			String url = launchUrl;
+			launchUrl = null;
+			callbackContext.success(url == null ? "" : url);
 		}
 		else if (action.equals("SWMgr_getPrefixPath")) {
 			String prefixPath = mgr.getPrefixPath();

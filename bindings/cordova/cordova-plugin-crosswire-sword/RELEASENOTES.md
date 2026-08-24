@@ -24,7 +24,10 @@
 * SWMgr.readFile/writeFile/listDir/removeFile/mkdir: plain file access through the engine's FileMgr, so paths in a shared (SAF) library work
 * SWMgr.getDataPath/getDataStorage/chooseDataStorage/clearDataStorage/describeTree: a separately granted study-data folder (e.g. on Google Drive) for bookmarks and the like
 * Android: writes to non-local document providers (Drive...) are staged and committed on close; such providers only accept content through a Java-side close
-* Android: all SWORD calls serialised through one lock (chapter rendering runs on the thread pool while re-initialisation runs on the main thread)
+* Android: actions on the same module run in order, different modules in parallel; chapter rendering and search run on engine-side clones (SWModule::clone), so the UI never waits on them
+* Android: re-initialisation keeps retiring managers alive briefly instead of deleting them, so renders and searches in flight survive a storage change
+* SWModule.SEARCHFLAG_MATCHWHOLEENTRY / SEARCHFLAG_STRICTBOUNDARIES search flag constants
+* SWMgr.getLaunchUrl and Android/iOS handling of sword:// and bible:// links (sword://module/key; empty module = the app's current Bible)
 * Android: default lexica re-resolved after augmenting modules (crash on the first Strong's render after choosing a shared library)
 
 ### 0.2.7 (Aug 19, 2026)
