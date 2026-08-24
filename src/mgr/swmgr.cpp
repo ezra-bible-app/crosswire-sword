@@ -34,6 +34,7 @@
 #include <rawtext.h>
 #include <rawtext4.h>
 #include <filemgr.h>
+#include <versificationmgr.h>
 #include <rawgenbook.h>
 #include <rawcom.h>
 #include <rawcom4.h>
@@ -973,6 +974,32 @@ SWModule *SWMgr::createModule(const char *name, const char *driver, ConfigEntMap
 	delete [] buf;
 
 	section["AbsoluteDataPath"] = datapath;
+
+	// a Bible or commentary may carry its own versification definition as
+	// v11n.xml in its data path.  It registers under the module's own name
+	// -- never replacing an existing system -- and overrides the conf's
+	// Versification value, so a module can bring a custom system and its
+	// mappings without touching anyone else's
+	if (!stricmp(driver, "zText") || !stricmp(driver, "zText4")
+			|| !stricmp(driver, "RawText") || !stricmp(driver, "RawText4")
+			|| !stricmp(driver, "zCom") || !stricmp(driver, "zCom4")
+			|| !stricmp(driver, "RawCom") || !stricmp(driver, "RawCom4")
+			|| !stricmp(driver, "RawFiles") || !stricmp(driver, "HREFCom")) {
+		SWBuf v11nPath = datapath;
+		if (!v11nPath.endsWith("/") && !v11nPath.endsWith("\\")) {
+			// a file-prefix style DataPath: look beside it
+			int i;
+			for (i = (int)v11nPath.length()-1; i >= 0 && v11nPath[(unsigned long)i] != '/' && v11nPath[(unsigned long)i] != '\\'; i--);
+			v11nPath.setSize(i+1);
+		}
+		v11nPath += "v11n.xml";
+		if (FileMgr::existsFile(v11nPath.c_str())) {
+			if (VersificationMgr::getSystemVersificationMgr()->registerVersificationSystemFromXML(v11nPath.c_str(), name)) {
+				versification = name;
+				section["Versification"] = versification;
+			}
+		}
+	}
 
 	if (!stricmp(sourceformat.c_str(), "GBF"))
 		markup = FMT_GBF;

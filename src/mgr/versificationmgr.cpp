@@ -27,6 +27,10 @@
 #include <treekey.h>
 #include <canon.h>		// KJV internal versification system
 #include <swlog.h>
+#include <filemgr.h>
+#include <utilxml.h>
+#include <stringmgr.h>
+#include <list>
 #include <algorithm>
 
 #include <canon_null.h>		// null v11n system
@@ -105,6 +109,10 @@ public:
 	typedef vector<const unsigned char*> mappingRule;
 	vector<mappingRule> mappings;
 	vector<const char*> mappingsExtraBooks;
+	/** (uppercased abbreviation, osis) pairs, sorted on demand; SWBuf pairs
+	 * copy safely with the System */
+	vector< std::pair<SWBuf, SWBuf> > ownAbbrevs;
+	bool ownAbbrevsSorted;
 
 	Private() {
 	}
@@ -261,6 +269,243 @@ void VersificationMgr::System::loadFromSBook(const sbook *ot, const sbook *nt, i
 			}
 		}
 	}
+}
+
+
+// under C++20, std::pair's synthesized comparison sees SWBuf's implicit
+// const char* conversion and compares POINTERS; compare contents explicitly
+struct AbbrevPairLess {
+	bool operator()(const std::pair<SWBuf, SWBuf> &a, const std::pair<SWBuf, SWBuf> &b) const {
+		int c = strcmp(a.first.c_str(), b.first.c_str());
+		if (c) return c < 0;
+		return strcmp(a.second.c_str(), b.second.c_str()) < 0;
+	}
+};
+
+
+static SWBuf upperAbbrevCopy(const char *s) {
+	char *buf = 0;
+	stdstr(&buf, s, 2);
+	StringMgr *stringMgr = StringMgr::getSystemStringMgr();
+	if (StringMgr::hasUTF8Support()) stringMgr->upperUTF8(buf, (unsigned int)(strlen(buf)*2));
+	else stringMgr->upperLatin1(buf);
+	SWBuf retVal = buf;
+	delete [] buf;
+	return retVal;
+}
+
+
+bool VersificationMgr::System::hasOwnAbbrevs() const {
+	return !p->ownAbbrevs.empty();
+}
+
+
+void VersificationMgr::System::addOwnAbbrev(const char *abbrev, const char *osis) {
+	if (!abbrev || !*abbrev || !osis || !*osis) return;
+	p->ownAbbrevs.push_back(std::make_pair(upperAbbrevCopy(abbrev), SWBuf(osis)));
+	p->ownAbbrevsSorted = false;
+}
+
+
+int VersificationMgr::System::getBookNumberByAbbrev(const char *upperAbbrev) const {
+	if (p->ownAbbrevs.empty() || !upperAbbrev || !*upperAbbrev) return -1;
+	if (!p->ownAbbrevsSorted) {
+		std::sort(p->ownAbbrevs.begin(), p->ownAbbrevs.end(), AbbrevPairLess());
+		p->ownAbbrevsSorted = true;
+	}
+	int abLen = (int)strlen(upperAbbrev);
+	int min = 0, max = (int)p->ownAbbrevs.size(), target = 0, diff = 1;
+	// binary search for a prefix match, same manners as the locale table
+	while (true) {
+		target = min + ((max - min) / 2);
+		diff = strncmp(upperAbbrev, p->ownAbbrevs[target].first.c_str(), abLen);
+		if ((!diff) || (target >= max) || (target <= min)) break;
+		if (diff > 0) min = target; else max = target;
+	}
+	for (; target > 0; target--) {
+		if (strncmp(upperAbbrev, p->ownAbbrevs[target-1].first.c_str(), abLen)) break;
+	}
+	if (diff) return -1;
+	int retVal = getBookNumberByOSISName(p->ownAbbrevs[target].second.c_str());
+	while ((retVal < 0) && (target < (int)p->ownAbbrevs.size()-1) && (!strncmp(upperAbbrev, p->ownAbbrevs[target+1].first.c_str(), abLen))) {
+		target++;
+		retVal = getBookNumberByOSISName(p->ownAbbrevs[target].second.c_str());
+	}
+	return retVal;
+}
+
+
+bool VersificationMgr::registerVersificationSystemFromXML(const char *path, const char *overrideName) {
+
+	// pull the whole definition through the FileMgr, so pluggable FileOps
+	// (e.g., Android shared storage) serve it like any module data
+	FileDesc *fd = FileMgr::getSystemFileMgr()->open(path, FileMgr::RDONLY);
+	if (!fd || fd->getFd() < 0) {
+		if (fd) FileMgr::getSystemFileMgr()->close(fd);
+		SWLog::getSystemLog()->logWarning("registerVersificationSystemFromXML: cannot open %s", path);
+		return false;
+	}
+	SWBuf xml;
+	char chunk[4096];
+	long bytes;
+	while ((bytes = fd->read(chunk, 4096)) > 0) xml.append(chunk, bytes);
+	FileMgr::getSystemFileMgr()->close(fd);
+
+	// stream the tags
+	SWBuf v11nID;
+	struct XBook { SWBuf name, osis, prefAbbrev; int chapMax; };
+	vector<XBook> otBooks, ntBooks;
+	vector<int> vm;
+	vector< std::pair<SWBuf, SWBuf> > abbrevs;	// (abbrev text, osis)
+	vector<SWBuf> extraBooks;
+	struct XMap { int book, toChapter, toVerse, toVerseMax, fromChapter, fromVerse, fromVerseMax, fromOtherBook; };
+	vector<XMap> maps;
+
+	int collection = 0;		// 1 = ot, 2 = nt
+	bool inAbbrevs = false, inMappings = false, inExtraBooks = false;
+	SWBuf abbrOsis;			// pending <abbr osisID=...> text
+
+	const char *sx = xml.c_str();
+	while (*sx) {
+		if (*sx != '<') { sx++; continue; }
+		const char *e = strchr(sx, '>');
+		if (!e) break;
+		SWBuf tagText;
+		tagText.append(sx+1, (unsigned long)(e-sx-1));
+		sx = e+1;
+		bool isEnd = tagText.startsWith("/");
+		XMLTag tag(tagText.c_str());
+		SWBuf tagName = isEnd ? SWBuf(tagText.c_str()+1) : SWBuf(tag.getName());
+		tagName.trim();
+
+		if (!isEnd && tagName == "v11n") { v11nID = tag.getAttribute("v11nID"); }
+		else if (tagName == "collection") { collection = isEnd ? 0 : atoi(tag.getAttribute("collectionID")); }
+		else if (tagName == "abbreviations") { inAbbrevs = !isEnd; }
+		else if (tagName == "mappings") { inMappings = !isEnd; }
+		else if (tagName == "extraBooks") { inExtraBooks = !isEnd; }
+		else if (!isEnd && tagName == "book") {
+			if (inMappings && inExtraBooks) { extraBooks.push_back(tag.getAttribute("name")); }
+			else if (collection == 1 || collection == 2) {
+				XBook b;
+				b.name = tag.getAttribute("name");
+				b.osis = tag.getAttribute("osisID");
+				b.prefAbbrev = tag.getAttribute("preferredAbbrev");
+				b.chapMax = 0;
+				(collection == 1 ? otBooks : ntBooks).push_back(b);
+			}
+		}
+		else if (!isEnd && tagName == "chapter" && (collection == 1 || collection == 2)) {
+			vector<XBook> &books = (collection == 1 ? otBooks : ntBooks);
+			if (books.size()) {
+				books[books.size()-1].chapMax++;
+				vm.push_back(atoi(tag.getAttribute("verseMax")));
+			}
+		}
+		else if (tagName == "abbr" && inAbbrevs) {
+			if (!isEnd) {
+				abbrOsis = tag.getAttribute("osisID");
+				// the abbreviation is the element's text content
+				const char *t = sx;
+				const char *te = strchr(t, '<');
+				if (te) {
+					SWBuf ab; ab.append(t, (unsigned long)(te-t)); ab.trim();
+					if (ab.length() && abbrOsis.length()) abbrevs.push_back(std::make_pair(ab, abbrOsis));
+				}
+			}
+		}
+		else if (!isEnd && tagName == "map" && inMappings) {
+			XMap m;
+			m.book = atoi(tag.getAttribute("book"));
+			m.toChapter = atoi(tag.getAttribute("toChapter"));
+			m.toVerse = atoi(tag.getAttribute("toVerse"));
+			m.toVerseMax = atoi(tag.getAttribute("toVerseMax"));
+			m.fromChapter = atoi(tag.getAttribute("fromChapter"));
+			m.fromVerse = atoi(tag.getAttribute("fromVerse"));
+			m.fromVerseMax = atoi(tag.getAttribute("fromVerseMax"));
+			m.fromOtherBook = atoi(tag.getAttribute("fromOtherBook"));
+			maps.push_back(m);
+		}
+	}
+
+	SWBuf name = (overrideName && *overrideName) ? SWBuf(overrideName) : v11nID;
+	if (!name.length() || (otBooks.empty() && ntBooks.empty())) {
+		SWLog::getSystemLog()->logWarning("registerVersificationSystemFromXML: %s is not a versification definition", path);
+		return false;
+	}
+
+	// the first registration wins: nothing replaces a built-in or an
+	// already-registered system, and keys holding a registered system stay
+	// valid for the life of the process
+	if (getVersificationSystem(name.c_str())) {
+		SWLog::getSystemLog()->logInformation("registerVersificationSystemFromXML: %s already registered; keeping the existing system", name.c_str());
+		return true;
+	}
+
+	// build the sbook arrays (Books copy the strings; these are temporary)
+	vector<sbook> ot, nt;
+	sbook sb, terminator;
+	terminator.name = ""; terminator.osis = ""; terminator.prefAbbrev = ""; terminator.chapmax = 0; terminator.versemax = 0;
+	for (unsigned int i = 0; i < otBooks.size(); i++) {
+		sb.name = otBooks[i].name.c_str(); sb.osis = otBooks[i].osis.c_str();
+		sb.prefAbbrev = otBooks[i].prefAbbrev.c_str(); sb.chapmax = otBooks[i].chapMax; sb.versemax = 0;
+		ot.push_back(sb);
+	}
+	ot.push_back(terminator);
+	for (unsigned int i = 0; i < ntBooks.size(); i++) {
+		sb.name = ntBooks[i].name.c_str(); sb.osis = ntBooks[i].osis.c_str();
+		sb.prefAbbrev = ntBooks[i].prefAbbrev.c_str(); sb.chapmax = ntBooks[i].chapMax; sb.versemax = 0;
+		nt.push_back(sb);
+	}
+	nt.push_back(terminator);
+
+	// the mapping blob is held by pointer inside the System, so it lives
+	// for the life of the process alongside it
+	const unsigned char *blobPtr = 0;
+	if (maps.size() || extraBooks.size()) {
+		static std::list< vector<unsigned char> > keeper;
+		vector<unsigned char> blob;
+		for (unsigned int i = 0; i < extraBooks.size(); i++) {
+			const char *n = extraBooks[i].c_str();
+			blob.insert(blob.end(), (const unsigned char *)n, (const unsigned char *)n + strlen(n) + 1);
+		}
+		blob.push_back(0);
+		int bookCount = (int)(otBooks.size() + ntBooks.size());
+		for (unsigned int i = 0; i < maps.size(); i++) {
+			const XMap &m = maps[i];
+			blob.push_back((unsigned char)m.book);
+			blob.push_back((unsigned char)m.toChapter);
+			blob.push_back((unsigned char)m.toVerse);
+			blob.push_back((unsigned char)m.toVerseMax);
+			blob.push_back((unsigned char)m.fromChapter);
+			blob.push_back((unsigned char)m.fromVerse);
+			blob.push_back((unsigned char)m.fromVerseMax);
+			if (m.book > bookCount) blob.push_back((unsigned char)m.fromOtherBook);
+		}
+		blob.push_back(0);
+		keeper.push_back(blob);
+		blobPtr = &(keeper.back())[0];
+	}
+
+	registerVersificationSystem(name.c_str(), &ot[0], &nt[0], vm.empty() ? 0 : &vm[0], blobPtr);
+
+	System *s = const_cast<System *>(getVersificationSystem(name.c_str()));
+	if (s) {
+		for (unsigned int i = 0; i < otBooks.size(); i++) {
+			s->addOwnAbbrev(otBooks[i].name.c_str(), otBooks[i].osis.c_str());
+			s->addOwnAbbrev(otBooks[i].osis.c_str(), otBooks[i].osis.c_str());
+			s->addOwnAbbrev(otBooks[i].prefAbbrev.c_str(), otBooks[i].osis.c_str());
+		}
+		for (unsigned int i = 0; i < ntBooks.size(); i++) {
+			s->addOwnAbbrev(ntBooks[i].name.c_str(), ntBooks[i].osis.c_str());
+			s->addOwnAbbrev(ntBooks[i].osis.c_str(), ntBooks[i].osis.c_str());
+			s->addOwnAbbrev(ntBooks[i].prefAbbrev.c_str(), ntBooks[i].osis.c_str());
+		}
+		for (unsigned int i = 0; i < abbrevs.size(); i++) {
+			s->addOwnAbbrev(abbrevs[i].first.c_str(), abbrevs[i].second.c_str());
+		}
+	}
+	SWLog::getSystemLog()->logInformation("registerVersificationSystemFromXML: registered %s from %s", name.c_str(), path);
+	return true;
 }
 
 

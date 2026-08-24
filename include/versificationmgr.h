@@ -146,6 +146,14 @@ public:
 		const int *getBMAX() const { return BMAX; };
 		long getNTStartOffset() const { return ntStartOffset; }
 		void translateVerse(const System *dstSys, const char **book, int *chapter, int *verse, int *verse_end) const;
+
+		/** a system loaded from XML may carry its own book abbreviations,
+		 * which then serve instead of the locale's table (see
+		 * VerseKey::getBookFromAbbrev) */
+		bool hasOwnAbbrevs() const;
+		void addOwnAbbrev(const char *abbrev, const char *osis);
+		/** upperAbbrev is already uppercased; returns book number or -1 */
+		int getBookNumberByAbbrev(const char *upperAbbrev) const;
 	};
 
 	VersificationMgr() { init(); }
@@ -155,6 +163,19 @@ public:
 	const StringList getVersificationSystems() const;
 	const System *getVersificationSystem(const char *name) const;
 	void registerVersificationSystem(const char *name, const sbook *ot, const sbook *nt, int *chMax, const unsigned char *mappings=NULL);
+
+	/** Registers a versification system from an XML definition -- the
+	 * format the VMR serves (v11n/collection/book/chapter, abbreviations,
+	 * mappings).  overrideName, when supplied, names the system instead of
+	 * the XML's v11nID (e.g., a module's own name).  A name already
+	 * registered is never replaced: the first registration wins, so no
+	 * definition can hijack a built-in or another module's system, and
+	 * keys pointing at a registered system stay valid for the life of the
+	 * process.
+	 *
+	 * @return true if the system is registered (now or previously);
+	 *	false if the definition could not be read or parsed */
+	bool registerVersificationSystemFromXML(const char *path, const char *overrideName = 0);
 	void registerVersificationSystem(const char *name, const TreeKey *);
 };
 

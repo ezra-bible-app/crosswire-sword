@@ -7,6 +7,7 @@ SET(test_PROGRAMS
 	bibliotest
 	casttest
 	clonetest
+	v11nxmltest
 	ciphertest
 	complzss
 	compnone

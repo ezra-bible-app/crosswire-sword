@@ -1,0 +1,14 @@
+register: ok
+system found: ok
+bookCount: 3
+Gen chapters: 2 lastVerseMax: 25
+FVD chapters: 1 lastVerseMax: 14
+Matt chapters: 2 lastVerseMax: 23
+re-register: ok
+abbr parse: FVD.1.7
+abbr parse: Matt.2.23
+osis parse: FVD.1.14
+after Gen 2:25 comes: FVD.1.1
+module found: ok
+effective versification: CustomV11n
+module key parse: FVD.1.9
