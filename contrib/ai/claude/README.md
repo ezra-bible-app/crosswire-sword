@@ -77,6 +77,17 @@ commit like everything else in this repository.
   Plan: decode old/new mapping tables, diff, turn the issue's `==`
   correspondences into translateVerse testsuite vectors.
 - MOD-474 open: psalm-title verse-number line-break rendering (filters).
+- **Mapping-authoring improvements**, Java-first per Troy (crosswire-java
+  is the working base to pull from): osisID accepted in map book/
+  fromOtherBook attributes (done in Java; C++ port pending review).
+  Agreed next: decode-blob-to-named-VerseMap at load in C++,
+  a blob<->XML dump tool (also the API-261 review instrument), and a
+  test pinning the last-book >= vs > extra-book check shared by both
+  implementations.  Real-world mapping example:
+  ~/src/vmrcre/contrib/v11ns/MTNU.xml (139 rules, MT<->intermediate);
+  the whole VMR v11n family lives in that directory.
+  NOTE: C++ pivots mappings through KJV/KJVA, Java through LXXNU --
+  unreconciled divergence, Troy to rule which is canonical.
 - sword-devel archive mirrored at ~/src/attic/sword-devel-archive
   (monthly .txt.gz, zgrep-able); VMR v11n XML:
   https://coptot.manuscriptroom.com/community/vmr/api/metadata/v11n/get/?format=xml&detail=chapter
