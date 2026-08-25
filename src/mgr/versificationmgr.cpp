@@ -283,18 +283,6 @@ struct AbbrevPairLess {
 };
 
 
-static SWBuf upperAbbrevCopy(const char *s) {
-	char *buf = 0;
-	stdstr(&buf, s, 2);
-	StringMgr *stringMgr = StringMgr::getSystemStringMgr();
-	if (StringMgr::hasUTF8Support()) stringMgr->upperUTF8(buf, (unsigned int)(strlen(buf)*2));
-	else stringMgr->upperLatin1(buf);
-	SWBuf retVal = buf;
-	delete [] buf;
-	return retVal;
-}
-
-
 bool VersificationMgr::System::hasOwnAbbrevs() const {
 	return !p->ownAbbrevs.empty();
 }
@@ -302,7 +290,9 @@ bool VersificationMgr::System::hasOwnAbbrevs() const {
 
 void VersificationMgr::System::addOwnAbbrev(const char *abbrev, const char *osis) {
 	if (!abbrev || !*abbrev || !osis || !*osis) return;
-	p->ownAbbrevs.push_back(std::make_pair(upperAbbrevCopy(abbrev), SWBuf(osis)));
+	SWBuf upper = abbrev;
+	upper.toUpper();
+	p->ownAbbrevs.push_back(std::make_pair(upper, SWBuf(osis)));
 	p->ownAbbrevsSorted = false;
 }
 
