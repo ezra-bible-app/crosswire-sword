@@ -88,7 +88,7 @@ commit like everything else in this repository.
   the whole VMR v11n family lives in that directory.
   Pivot divergence RESOLVED by design decision (2026-08-25): a reserved
   synthetic SUPERSET intermediate v11n, never module-bearing, append-only,
-  seeded from LXXNU.  Full proposal: doc/universal-intermediate-v11n.md
+  seeded from LXXNU.  Full proposal: doc/bible-intermediate-v11n.md (name decided: 'Bible'; one hub per corpus — Homer/Avestan later). Verification: collate Paratext .vrs + Tyndale TVTMS/old STEP + BiblIndex API + CCEL refsys; unanimous→adopt, conflict→review. Tooling: tests/parsekey drives cross-v11n translation ([v11n]...[to_v11n] args); VMR serves v11ns at vmr/api/metadata/v11n/get (xml/json/csv); sword-tools/versification/ = the toolbox (canon.*.xml collections, av11n.py, validate_v11n.py)
   (uncommitted, awaiting Troy's review).  C++ mapping data to convert:
   Vulg/Calvin/Segond/DarbyFr/NRSV via a to-be-built KJVA<->LXXNU bridge;
   Synodal re-authored from API-261.  MTNU book 25 = Ps (MT order!) --
