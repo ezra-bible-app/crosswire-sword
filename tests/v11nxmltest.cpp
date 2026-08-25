@@ -57,9 +57,13 @@ int main(int argc, char **argv) {
 		cout << "module found: " << (m ? "ok" : "FAILED") << "\n";
 		if (m) {
 			cout << "effective versification: " << m->getConfigEntry("Versification") << "\n";
-			m->setKey("Vision of Daniel 1:9");
+			m->setKey("Vision of Daniel 1:2");
 			VerseKey *mk = (VerseKey *)m->getKey();
 			cout << "module key parse: " << mk->getOSISRef() << "\n";
+			// the data was built with this system, so it reads back true
+			cout << "module data: " << m->renderText() << "\n";
+			m->setKey("Gen 2:1");
+			cout << "module data: " << m->renderText() << "\n";
 		}
 	}
 

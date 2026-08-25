@@ -166,6 +166,14 @@ int main(int argc, char **argv) {
 		else usage(progName, (((SWBuf)"Unknown argument: ")+ argv[i]).c_str());
 	}
 	// -----------------------------------------------------
+	// a path to a versification definition registers it and uses it, so a
+	// module can be BUILT with the custom system it ships
+	if (v11n.endsWith(".xml") && FileMgr::existsFile(v11n.c_str())) {
+		SWBuf registered;
+		if (VersificationMgr::getSystemVersificationMgr()->registerVersificationSystemFromXML(v11n.c_str(), 0, &registered)) v11n = registered;
+		else std::cout << "Warning: " << v11n << " could not be read as a versification definition.\n";
+	}
+
 	const VersificationMgr::System *v = VersificationMgr::getSystemVersificationMgr()->getVersificationSystem(v11n);
 	if (!v) std::cout << "Warning: Versification " << v11n << " not found. Using KJV versification...\n";
 

@@ -335,7 +335,7 @@ int VersificationMgr::System::getBookNumberByAbbrev(const char *upperAbbrev) con
 }
 
 
-bool VersificationMgr::registerVersificationSystemFromXML(const char *path, const char *overrideName) {
+bool VersificationMgr::registerVersificationSystemFromXML(const char *path, const char *overrideName, SWBuf *registeredName) {
 
 	// pull the whole definition through the FileMgr, so pluggable FileOps
 	// (e.g., Android shared storage) serve it like any module data
@@ -436,6 +436,7 @@ bool VersificationMgr::registerVersificationSystemFromXML(const char *path, cons
 	// the first registration wins: nothing replaces a built-in or an
 	// already-registered system, and keys holding a registered system stay
 	// valid for the life of the process
+	if (registeredName) *registeredName = name;
 	if (getVersificationSystem(name.c_str())) {
 		SWLog::getSystemLog()->logInformation("registerVersificationSystemFromXML: %s already registered; keeping the existing system", name.c_str());
 		return true;

@@ -173,9 +173,11 @@ public:
 	 * keys pointing at a registered system stay valid for the life of the
 	 * process.
 	 *
+	 * registeredName, when supplied, receives the effective system name.
+	 *
 	 * @return true if the system is registered (now or previously);
 	 *	false if the definition could not be read or parsed */
-	bool registerVersificationSystemFromXML(const char *path, const char *overrideName = 0);
+	bool registerVersificationSystemFromXML(const char *path, const char *overrideName = 0, SWBuf *registeredName = 0);
 	void registerVersificationSystem(const char *name, const TreeKey *);
 };
 

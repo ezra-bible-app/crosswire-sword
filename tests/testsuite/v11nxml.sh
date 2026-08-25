@@ -1,7 +1,9 @@
 #!/bin/sh
 #******************************************************************************
 #
-# registerVersificationSystemFromXML and the SWMgr v11n.xml module hook
+# registerVersificationSystemFromXML, osis2mod -v <definition.xml>, and the
+# SWMgr v11n.xml module hook: the module is BUILT with the custom system it
+# ships, so its data and its versification agree
 #
 # Copyright 2026 CrossWire Bible Society (http://www.crosswire.org)
 #	CrossWire Bible Society
@@ -29,12 +31,14 @@ Encoding=UTF-8
 BlockType=BOOK
 CompressType=ZIP
 SourceType=OSIS
-Versification=KJV
+Versification=TestCustom
 Lang=en
 !
 
-../../utilities/osis2mod tmp/v11nxml/modules/ztext/ osisReference.xml -z > /dev/null 2>&1
+# the definition ships in the module's data path...
 cp v11nxml-fixture.xml tmp/v11nxml/modules/ztext/v11n.xml
+# ...and -v <definition.xml> builds the module with that same system
+../../utilities/osis2mod tmp/v11nxml/modules/ztext/ v11nxml-osis.xml -z -v v11nxml-fixture.xml > /dev/null 2>&1
 
 cd tmp/v11nxml
 ../../../v11nxmltest ../../v11nxml-fixture.xml . CustomV11n

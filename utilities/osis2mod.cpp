@@ -44,6 +44,7 @@
 #include <listkey.h>
 #include <versekey.h>
 #include <versificationmgr.h>
+#include <filemgr.h>
 #include <swversion.h>
 
 #include <ztext.h>
@@ -2625,6 +2626,20 @@ int main(int argc, char **argv) {
 			SWBuf v11nInput = arg;
 
 			VersificationMgr *vmgr = VersificationMgr::getSystemVersificationMgr();
+
+			// a path to a versification definition registers it and uses
+			// it, so a module can be BUILT with the custom system it ships
+			if (v11nInput.endsWith(".xml") && FileMgr::existsFile(v11nInput.c_str())) {
+				SWBuf registered;
+				if (!vmgr->registerVersificationSystemFromXML(v11nInput.c_str(), 0, &registered)) {
+					SWBuf error = "-v ";
+					error += v11nInput;
+					error += " could not be read as a versification definition";
+					usage(*argv, error);
+				}
+				v11nInput = registered;
+			}
+
 			const StringList &av11ns = vmgr->getVersificationSystems();
 			StringList matches = resolve_abbreviation(v11nInput, av11ns);
 
