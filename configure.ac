@@ -158,14 +158,9 @@ AC_LANG_POP([C++])
 # Check libraries
 # ---------------------------------------------------------------------
 if test x$with_zlib  = xyes; then
-	AC_CHECK_LIB(z, compress,,with_zlib="no")
+	AC_CHECK_LIB(z, compress,,AC_MSG_ERROR([zlib not found.  zlib is required: zText/zCom/zLD modules and remote-install archives depend on it.  Install the zlib development files.]))
 else
-	with_zlib="no"
-fi
-
-if test x$with_zlib = xno; then
-	AM_CFLAGS="$AM_CFLAGS -DEXCLUDEZLIB"
-	AM_CXXFLAGS="$AM_CXXFLAGS -DEXCLUDEZLIB"
+	AC_MSG_ERROR([--without-zlib is not supported: zlib is required (zText/zCom/zLD modules and remote-install archives).  A build without it stopped compiling long ago, so the option only delayed the failure.])
 fi
 
 if test x$with_bzip2  = xyes; then
