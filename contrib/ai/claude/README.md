@@ -86,8 +86,14 @@ commit like everything else in this repository.
   implementations.  Real-world mapping example:
   ~/src/vmrcre/contrib/v11ns/MTNU.xml (139 rules, MT<->intermediate);
   the whole VMR v11n family lives in that directory.
-  NOTE: C++ pivots mappings through KJV/KJVA, Java through LXXNU --
-  unreconciled divergence, Troy to rule which is canonical.
+  Pivot divergence RESOLVED by design decision (2026-08-25): a reserved
+  synthetic SUPERSET intermediate v11n, never module-bearing, append-only,
+  seeded from LXXNU.  Full proposal: doc/universal-intermediate-v11n.md
+  (uncommitted, awaiting Troy's review).  C++ mapping data to convert:
+  Vulg/Calvin/Segond/DarbyFr/NRSV via a to-be-built KJVA<->LXXNU bridge;
+  Synodal re-authored from API-261.  MTNU book 25 = Ps (MT order!) --
+  never guess book numbers, the collections restart numbering per
+  testament and canon orders differ.
 - sword-devel archive mirrored at ~/src/attic/sword-devel-archive
   (monthly .txt.gz, zgrep-able); VMR v11n XML:
   https://coptot.manuscriptroom.com/community/vmr/api/metadata/v11n/get/?format=xml&detail=chapter
