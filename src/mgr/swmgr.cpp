@@ -945,6 +945,14 @@ SWModule *SWMgr::createModule(const char *name, const char *driver, ConfigEntMap
 	SWBuf lang, sourceformat, encoding;
 	signed char direction, enc, markup;
 
+	// module names and data paths are promised to stay within the library;
+	// frontends build filesystem paths from both, so refuse the makings of
+	// path traversal here rather than trusting every conf
+	if (strstr(name, "..") || strchr(name, '/') || strchr(name, '\\')) {
+		SWLog::getSystemLog()->logWarning("Refusing module with unsafe name: %s", name);
+		return 0;
+	}
+
 	description  = ((entry = section.find("Description")) != section.end()) ? (*entry).second : (SWBuf)"";
 	lang  = ((entry = section.find("Lang")) != section.end()) ? (*entry).second : (SWBuf)"en";
  	sourceformat = ((entry = section.find("SourceType"))  != section.end()) ? (*entry).second : (SWBuf)"";
@@ -966,6 +974,11 @@ SWModule *SWMgr::createModule(const char *name, const char *driver, ConfigEntMap
 	for (; ((*buf2) && ((*buf2 == '/') || (*buf2 == '\\'))); buf2++);
 	if (!strncmp(buf2, "./", 2)) { //remove the leading ./ in the module data path to make it look better
 		buf2 += 2;
+	}
+	if (strstr(buf2, "..")) {
+		SWLog::getSystemLog()->logWarning("Refusing module %s: DataPath climbs out of the library: %s", name, buf2);
+		delete [] buf;
+		return 0;
 	}
 	// PrefixPath - absolute directory path to the repository in which this module was found
 	section["PrefixPath"] = datapath;
