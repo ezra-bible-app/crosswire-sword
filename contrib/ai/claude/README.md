@@ -57,6 +57,26 @@ commit like everything else in this repository.
   clones).  Cross-repo port markers (crosswire-java) carry both that
   ordinal and the sha.
 
+## Hard-won mapping lessons (2026-08-25)
+
+- **Rule order is precedence**: translateVerse's forward branch searches
+  the per-book list REVERSED, so later rules shadow earlier ones, and
+  the authored streams interleave deliberately (canon_synodal: PrAzar
+  79,79 then Dan 35,35,35 then Sus 80, Bel 81).  NEVER reorder mapping
+  data (dumps, conversions, sorts).  Storage keeps one globally-ordered
+  rule list with per-book index vectors for exactly this reason.
+- **Field names read backwards** (locked by the XML schema + Java):
+  to* = the system's OWN coordinates, from* = the reference/pivot's.
+  Cyrille's API-261 comment names them the other way but his data
+  layout is correct.
+- The >= extra-book check in translateVerse's reversed branch was a
+  real OOB bug: book ids are 1-based, id == size is the LAST real book
+  (Calvin/NRSV Rev rules read past their 7-byte rule; KJVA Rev 13:1 ->
+  Calvin crashed hardened builds).  Fixed to > in C++ and Java.
+- Verification harness: tabledump (scratchpad) generates the complete
+  419,819-line translation table for all six mapped systems <-> KJVA;
+  byte-identical before/after is the refactor gate.
+
 ## State of play (2026-08-25)
 
 - Release prep for the first engine release since 1.9.0 (Nov 2020).
