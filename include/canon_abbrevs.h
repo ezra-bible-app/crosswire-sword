@@ -409,7 +409,7 @@ const struct abbrev builtin_abbrevs[] = {
   {"JAMES", "Jas"},		// James
   {"JAS", "Jas"},		// James
   {"JB", "Job"},		// Job
-  {"JD", "Judg"},		// Judges
+  {"JD", "Jude"},		// Jude
   {"JDGS", "Judg"},		// Judges
   {"JDT", "Jdt"},		// Judith
   {"JER", "Jer"},		// Jeremiah
@@ -491,12 +491,9 @@ const struct abbrev builtin_abbrevs[] = {
   {"PRMAN", "PrMan"},		// Prayer of Manasses
   {"PROV", "Prov"},		// Proverbs
   {"PROVERBS", "Prov"},		// Proverbs
+  {"PRVRBS", "Prov"},		// Proverbs
   {"PS", "Ps"},		// Psalms
-//  {"PS 151", "AddPs"},		// Additional Psalm
-//  {"PS151", "AddPs"},		// Additional Psalm
   {"PSALM", "Ps"},		// Psalms
-//  {"PSALM 151", "AddPs"},		// Additional Psalm
-//  {"PSALM151", "AddPs"},		// Additional Psalm
   {"PSALMS", "Ps"},		// Psalms
   {"PSALMS OF SOLOMON", "PssSol"},		// Psalms of Solomon
   {"PSM", "Ps"},		// Psalms
@@ -510,7 +507,7 @@ const struct abbrev builtin_abbrevs[] = {
   {"ROMANS", "Rom"},		// Romans
   {"RUTH", "Ruth"},		// Ruth
   {"S", "Song"},		// Song of Solomon
-//  {"S3Y", "PrAzar"},		// Prayer of Azariah
+  {"S3Y", "PrAzar"},		// Prayer of Azariah
   {"SI", "Sir"},		// Sirach
   {"SIP", "SirP"},		// Sirach (Prologue)
   {"SIR", "Sir"},		// Sirach
@@ -529,19 +526,23 @@ const struct abbrev builtin_abbrevs[] = {
   {"T", "Titus"},		// Titus
   {"TB", "Tob"},		// Tobit
   {"TBT", "Tob"},		// Tobit
+  {"THE FOURTEENTH VISION OF DANIEL", "FVD"},
   {"TITUS", "Titus"},		// Titus
   {"TOB", "Tob"},		// Tobit
   {"TOBIT", "Tob"},		// Tobit
+  {"VISION OF DANIEL", "FVD"},
   {"WIS", "Wis"},		// Wisdom
   {"WISDOM", "Wis"},		// Wisdom
   {"WISDOM OF BEN SIRA", "Sir"},		// Sirach
   {"WISDOM OF JESUS SON OF SIRACH", "Sir"},		// Sirach
   {"WISDOM OF SIRACH", "Sir"},		// Sirach
   {"WISDOM OF SOLOMON", "Wis"},		// Wisdom
+  {"ZCHRIAH", "Zech"},		// Zechariah
   {"ZECH", "Zech"},		// Zechariah
   {"ZECHARIAH", "Zech"},		// Zechariah
   {"ZEPH", "Zeph"},		// Zephaniah
   {"ZEPHANIAH", "Zeph"},		// Zephaniah
+  {"ZPHNIAH", "Zeph"},		// Zephaniah
   {"", ""}
 };
 
