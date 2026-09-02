@@ -39,6 +39,8 @@ extern "C" {
 #define org_crosswire_android_sword_SWModule_VERSEKEY_BOOKABBREV 9L
 #undef org_crosswire_android_sword_SWModule_VERSEKEY_OSISBOOKNAME
 #define org_crosswire_android_sword_SWModule_VERSEKEY_OSISBOOKNAME 10L
+#undef org_crosswire_android_sword_SWModule_VERSEKEY_COLLECTIONNAME
+#define org_crosswire_android_sword_SWModule_VERSEKEY_COLLECTIONNAME 11L
 /*
  * Class:     org_crosswire_android_sword_SWModule
  * Method:    terminateSearch

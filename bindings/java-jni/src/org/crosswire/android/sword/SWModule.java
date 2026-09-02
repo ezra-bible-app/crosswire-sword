@@ -51,6 +51,7 @@ public class SWModule {
 	public static final int VERSEKEY_SHORTTEXT    =  8;
 	public static final int VERSEKEY_BOOKABBREV   =  9;
 	public static final int VERSEKEY_OSISBOOKNAME = 10;
+	public static final int VERSEKEY_COLLECTIONNAME = 11;	// the named collection the book belongs to ("Appendix"), "" for an ordinary OT or NT book
 
 	private SWModule() {}	// don't allow allocation, instead use factory method SWMgr.getModuleByName to retrieve an instance
 	public SWModule(String name, String remoteSourceName) { this.name = name; this.remoteSourceName = remoteSourceName; }	// ok, well, our stub can create a shell with name and remoteSourceName

@@ -19,6 +19,7 @@ var mySWORDPlugin:SWORD? = nil
 	var VERSEKEY_SHORTTEXT = Int(org_crosswire_sword_SWModule_VERSEKEY_SHORTTEXT);
 	var VERSEKEY_BOOKABBREV = Int(org_crosswire_sword_SWModule_VERSEKEY_BOOKABBREV);
 	var VERSEKEY_OSISBOOKNAME = Int(org_crosswire_sword_SWModule_VERSEKEY_OSISBOOKNAME);
+	var VERSEKEY_COLLECTIONNAME = Int(org_crosswire_sword_SWModule_VERSEKEY_COLLECTIONNAME);
 
     var LOG_ERROR = Int32(org_crosswire_sword_SWLog_LOG_ERROR);
     var LOG_WARN = Int32(org_crosswire_sword_SWLog_LOG_WARN);
@@ -43,6 +44,7 @@ var mySWORDPlugin:SWORD? = nil
 		VERSEKEY_SHORTTEXT = Int(org_crosswire_sword_SWModule_VERSEKEY_SHORTTEXT);
 		VERSEKEY_BOOKABBREV = Int(org_crosswire_sword_SWModule_VERSEKEY_BOOKABBREV);
 		VERSEKEY_OSISBOOKNAME = Int(org_crosswire_sword_SWModule_VERSEKEY_OSISBOOKNAME);
+		VERSEKEY_COLLECTIONNAME = Int(org_crosswire_sword_SWModule_VERSEKEY_COLLECTIONNAME);
 
         LOG_ERROR = Int32(org_crosswire_sword_SWLog_LOG_ERROR);
         LOG_WARN = Int32(org_crosswire_sword_SWLog_LOG_WARN);

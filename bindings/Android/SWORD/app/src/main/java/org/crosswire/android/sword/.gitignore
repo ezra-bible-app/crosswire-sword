@@ -1,0 +1,4 @@
+# copied here from ../../../../../../../../../java-jni/src by the java-jni Makefile; edit them there
+InstallMgr.java
+SWMgr.java
+SWModule.java

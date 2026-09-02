@@ -73,6 +73,7 @@ const int org_crosswire_sword_SWModule_VERSEKEY_OSISREF = 7;
 const int org_crosswire_sword_SWModule_VERSEKEY_SHORTTEXT = 8;
 const int org_crosswire_sword_SWModule_VERSEKEY_BOOKABBREV = 9;
 const int org_crosswire_sword_SWModule_VERSEKEY_OSISBOOKNAME = 10;
+const int org_crosswire_sword_SWModule_VERSEKEY_COLLECTIONNAME = 11;	// the named collection the book belongs to ("Appendix"), "" for an ordinary OT or NT book
 // for backward compat.  Remove
 const int org_crosswire_sword_SWModule_VERSEKEY_CHAPMAX = 4;
 
