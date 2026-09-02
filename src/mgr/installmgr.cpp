@@ -192,6 +192,19 @@ void InstallMgr::readInstallConf() {
 			sourceBegin++;
 		}
 
+		sourceBegin = confSection->second.lower_bound("HTTPPackagePreference");
+		sourceEnd   = confSection->second.upper_bound("HTTPPackagePreference");
+
+		while (sourceBegin != sourceEnd) {
+			InstallSource *is = new InstallSource("HTTP", sourceBegin->second.c_str());
+			is->packagePreference = true;
+			addInstallSourceToSources(sources, is->caption, is);
+			SWBuf parent = (SWBuf)privatePath + "/" + is->uid + "/file";
+			FileMgr::createParent(parent.c_str());
+			is->localShadow = (SWBuf)privatePath + "/" + is->uid;
+			sourceBegin++;
+		}
+
 		sourceBegin = confSection->second.lower_bound("FTPSource");
 		sourceEnd = confSection->second.upper_bound("FTPSource");
 

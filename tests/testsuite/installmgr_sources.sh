@@ -66,3 +66,20 @@ im_conf "HTTPSPackagePreference=CrossWire|crosswire.org|/ftpmirror/pub/sword/raw
 	"HTTPSSource=CrossWire|mirror.example.org|/sword/raw|||mymirror" \
 	"HTTPSource=Elsewhere|www.elsewhere.org|/sword|||elsewhere"
 im -s -sn
+
+echo
+echo "== an HTTP (no 's') package preference: heads its chain, is used for single file fetches, is never walked, and survives a re-read of the config"
+mkdir -p $IMFIX/http/ftp.xiphos.org/pub $IMFIX/ftp/ftp.xiphos.org/pub
+cp -r $IMREPO $IMFIX/http/ftp.xiphos.org/pub/xiphos
+cp -r $IMREPO $IMFIX/ftp/ftp.xiphos.org/pub/xiphos
+rm -f $IMFIX/http/ftp.xiphos.org/pub/xiphos/packages/GBSReference.zip
+im_conf "HTTPPackagePreference=Xiphos|ftp.xiphos.org|/pub/xiphos|||xiphoshttp" \
+	"FTPSource=Xiphos|ftp.xiphos.org|/pub/xiphos|||20090514005900"
+im -s -r Xiphos -rl Xiphos -ri Xiphos GBSReference -sc -conf
+
+echo
+echo "== https, http and ftp preferences for one caption chain in that order"
+im_conf "FTPSource=Both|ftp.crosswire.org|/pub/sword/raw|||both-ftp" \
+	"HTTPPackagePreference=Both|crosswire.org|/ftpmirror/pub/sword/raw|||both-http" \
+	"HTTPSPackagePreference=Both|crosswire.org|/ftpmirror/pub/sword/raw|||both-https"
+im -s

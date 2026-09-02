@@ -125,3 +125,47 @@ Remote Sources:
 	UID      : elsewhere
 CrossWire
 Elsewhere
+
+== an HTTP (no 's') package preference: heads its chain, is used for single file fetches, is never walked, and survives a re-read of the config
+Remote Sources:
+[Xiphos]
+	Type     : HTTP (PackagePreference)
+	Source   : ftp.xiphos.org
+	Directory: /pub/xiphos
+	UID      : xiphoshttp
+	(chained 1) Type     : FTP
+	(chained 1) Source   : ftp.xiphos.org
+	(chained 1) Directory: /pub/xiphos
+	(chained 1) UID      : 20090514005900
+MOCK http GET http://ftp.xiphos.org/pub/xiphos/mods.d.tar.gz -> 0 (timeout=10000)
+refreshRemoteSource(Xiphos): OK (0)
+Available Modules from [Xiphos]:
+	[GBSReference] (1.0) - GBS Reference Test Module
+	[GBSSecond] (2.1) - Second Test Module
+	2 modules
+MOCK http GET http://ftp.xiphos.org/pub/xiphos/packages/GBSReference.zip -> -5 (timeout=10000)
+MOCK ftp GET ftp://ftp.xiphos.org/pub/xiphos/packages/GBSReference.zip -> 0 (timeout=10000)
+installModule(Xiphos, GBSReference): OK (0)
+MOCK http GET https://crosswire.org/ftpmirror/pub/sword/masterRepoList.conf -> 0 (timeout=10000)
+refreshRemoteSourceConfiguration: OK (0)
+[Sources]
+FTPSource=CrossWire|ftp.crosswire.org|/pub/sword/raw|||20081216195754
+FTPSource=CrossWire Beta|ftp.crosswire.org|/pub/sword/betaraw|||20090224125400
+FTPSource=Xiphos|ftp.xiphos.org|/pub/xiphos|||20090514005900
+HTTPPackagePreference=Xiphos|ftp.xiphos.org|/pub/xiphos|||xiphoshttp
+
+== https, http and ftp preferences for one caption chain in that order
+Remote Sources:
+[Both]
+	Type     : HTTPS (PackagePreference)
+	Source   : crosswire.org
+	Directory: /ftpmirror/pub/sword/raw
+	UID      : both-https
+	(chained 1) Type     : HTTP (PackagePreference)
+	(chained 1) Source   : crosswire.org
+	(chained 1) Directory: /ftpmirror/pub/sword/raw
+	(chained 1) UID      : both-http
+	(chained 2) Type     : FTP
+	(chained 2) Source   : ftp.crosswire.org
+	(chained 2) Directory: /pub/sword/raw
+	(chained 2) UID      : both-ftp

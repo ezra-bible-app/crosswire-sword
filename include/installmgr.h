@@ -62,7 +62,7 @@ public:
 
 	/** Sources which share a caption are chained together in the order they
 	 *  are read from InstallMgr.conf: HTTPSPackagePreference first, then
-	 *  FTPSource, SFTPSource, HTTPSource, HTTPSSource.  Only the head of a
+	 *  HTTPPackagePreference, FTPSource, SFTPSource, HTTPSource, HTTPSSource.  Only the head of a
 	 *  chain appears in InstallMgr::sources.  A remote operation (refresh,
 	 *  install) tries each source in the chain, in order, until one succeeds,
 	 *  so an HTTPS PackagePreference chained before an FTP source gives
