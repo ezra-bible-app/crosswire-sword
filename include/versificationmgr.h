@@ -85,6 +85,7 @@ public:
 	class SWDLLEXPORT Book {
 	private:
 		friend class System;
+		friend class VersificationMgr;
 		friend struct BookOffsetLess;
 		class Private;
 		Private *p;
@@ -100,6 +101,9 @@ public:
 
 		/** Maximum chapters in book */
 		unsigned int chapMax;
+
+		/** the named collection this book belongs to, if any (see getCollectionName) */
+		SWBuf collectionName;
 
 		void init();
 
@@ -120,6 +124,16 @@ public:
 		const char *getPreferredAbbreviation() const { return prefAbbrev.c_str(); }
 		int getChapterMax() const { return chapMax; }
 		int getVerseMax(int chapter) const;
+
+		/** The name of the collection this book was defined in, or ""
+		 * for an ordinary Old or New Testament book.  A v11n XML
+		 * definition may group books under a named collection, e.g.
+		 * <collection name="Appendix"> for works a codex carries after
+		 * the canon; such books are stored in a testament like any
+		 * other (see registerVersificationSystemFromXML), so keys and
+		 * modules never notice, but a frontend listing books may break
+		 * them out under this heading */
+		const char *getCollectionName() const { return collectionName.c_str(); }
 	};
 
 	class SWDLLEXPORT System {
@@ -223,10 +237,34 @@ public:
 	 * keys pointing at a registered system stay valid for the life of the
 	 * process.
 	 *
+	 * Collections.  A collection's collectionID (1 or 2) is the testament
+	 * its books are stored in and defaults to 2; a collection may carry a
+	 * name, which its books report through Book::getCollectionName.
+	 * Collections with the same collectionID concatenate in document
+	 * order, so an appendix after the canon is written as a second,
+	 * named collection:
+	 *	<collection collectionID="2"> ...Matt..Rev... </collection>
+	 *	<collection name="Appendix"> ...Barn, Herm... </collection>
+	 * (and a KJVA-style apocrypha after the OT as
+	 *	<collection collectionID="1" name="Apocrypha">).
+	 *
+	 * Deltas.  <v11n base="LXXNU"> derives the system from an already
+	 * registered one (built-ins always are; a base that is another
+	 * module's system depends on load order, and a base not registered
+	 * yet is refused): the body then describes only the differences.  A book the base lacks is
+	 * inserted -- after or before a base book named by an after= or
+	 * before= attribute, else at the end of its testament.  A book the
+	 * base has is patched: only the chapters listed (numbered by their
+	 * osisID, Ps.151) change, a chapter past the base's last extends
+	 * the book, and a name, preferredAbbrev or collection given replaces
+	 * the base's.  refSys, abbreviations and mappings are inherited and
+	 * added to.
+	 *
 	 * registeredName, when supplied, receives the effective system name.
 	 *
 	 * @return true if the system is registered (now or previously);
-	 *	false if the definition could not be read or parsed */
+	 *	false if the definition could not be read or parsed, or its
+	 *	base is not registered */
 	bool registerVersificationSystemFromXML(const char *path, const char *overrideName = 0, SWBuf *registeredName = 0);
 	void registerVersificationSystem(const char *name, const TreeKey *);
 };

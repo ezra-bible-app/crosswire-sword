@@ -473,10 +473,18 @@ bool VersificationMgr::registerVersificationSystemFromXML(const char *path, cons
 	FileMgr::getSystemFileMgr()->close(fd);
 
 	// stream the tags
-	SWBuf v11nID, refSys;
-	struct XBook { SWBuf name, osis, prefAbbrev; int chapMax; };
-	vector<XBook> otBooks, ntBooks;
-	vector<int> vm;
+	SWBuf v11nID, refSys, base;
+	// a book as the definition (or its base) describes it: which testament
+	// it is stored in, the collection name it reports, and its chapters'
+	// verse maxima -- -1 for a chapter the definition did not list, which
+	// a delta leaves as the base has it
+	struct XBook {
+		SWBuf name, osis, prefAbbrev, collection, after, before;
+		int testament;
+		vector<int> verseMax;
+		XBook() : testament(2) {}
+	};
+	vector<XBook> books;		// as parsed, document order
 	vector< std::pair<SWBuf, SWBuf> > abbrevs;	// (abbrev text, osis)
 	vector<SWBuf> extraBooks;
 	// <map> with the MappingRule attribute names (ourBook, ourChapter, ...,
@@ -484,7 +492,8 @@ bool VersificationMgr::registerVersificationSystemFromXML(const char *path, cons
 	struct XMap { SWBuf ourBook, refBook; int ourChapter, ourVerse, ourVerseMax, refChapter, refVerse, refVerseMax; };
 	vector<XMap> maps;
 
-	int collection = 0;		// 1 = ot, 2 = nt
+	int collection = 0;		// the testament of the open collection: 1 = ot, 2 = nt; 0 = none open
+	SWBuf collectionName;
 	bool inAbbrevs = false, inMappings = false, inExtraBooks = false;
 	SWBuf abbrOsis;			// pending <abbr osisID=...> text
 
@@ -501,8 +510,21 @@ bool VersificationMgr::registerVersificationSystemFromXML(const char *path, cons
 		SWBuf tagName = isEnd ? SWBuf(tagText.c_str()+1) : SWBuf(tag.getName());
 		tagName.trim();
 
-		if (!isEnd && tagName == "v11n") { v11nID = tag.getAttribute("v11nID"); refSys = tag.getAttribute("refSys"); }
-		else if (tagName == "collection") { collection = isEnd ? 0 : atoi(tag.getAttribute("collectionID")); }
+		if (!isEnd && tagName == "v11n") { v11nID = tag.getAttribute("v11nID"); refSys = tag.getAttribute("refSys"); base = tag.getAttribute("base"); }
+		else if (tagName == "collection") {
+			if (isEnd) { collection = 0; collectionName = ""; }
+			else {
+				// collectionID is the storage testament and defaults to 2
+				// (the NT): what follows the canon lives there
+				const char *id = tag.getAttribute("collectionID");
+				collection = (id && *id) ? atoi(id) : 2;
+				if (collection != 1 && collection != 2) {
+					SWLog::getSystemLog()->logWarning("registerVersificationSystemFromXML: %s: collectionID %s is not 1 or 2; storing its books in the New Testament", path, id);
+					collection = 2;
+				}
+				collectionName = tag.getAttribute("name");
+			}
+		}
 		else if (tagName == "abbreviations") { inAbbrevs = !isEnd; }
 		else if (tagName == "mappings") { inMappings = !isEnd; }
 		else if (tagName == "extraBooks") { inExtraBooks = !isEnd; }
@@ -513,15 +535,25 @@ bool VersificationMgr::registerVersificationSystemFromXML(const char *path, cons
 				b.name = tag.getAttribute("name");
 				b.osis = tag.getAttribute("osisID");
 				b.prefAbbrev = tag.getAttribute("preferredAbbrev");
-				b.chapMax = 0;
-				(collection == 1 ? otBooks : ntBooks).push_back(b);
+				b.collection = collectionName;
+				b.after = tag.getAttribute("after");
+				b.before = tag.getAttribute("before");
+				b.testament = collection;
+				books.push_back(b);
 			}
 		}
 		else if (!isEnd && tagName == "chapter" && (collection == 1 || collection == 2)) {
-			vector<XBook> &books = (collection == 1 ? otBooks : ntBooks);
-			if (books.size()) {
-				books[books.size()-1].chapMax++;
-				vm.push_back(atoi(tag.getAttribute("verseMax")));
+			if (books.size() && !(inMappings && inExtraBooks)) {
+				XBook &b = books[books.size()-1];
+				// the chapter number is the osisID's last segment (Ps.151);
+				// without one, the next chapter in sequence
+				int number = 0;
+				const char *osisID = tag.getAttribute("osisID");
+				const char *dot = (osisID && *osisID) ? strrchr(osisID, '.') : 0;
+				if (dot) number = atoi(dot+1);
+				if (number < 1) number = (int)b.verseMax.size() + 1;
+				if ((int)b.verseMax.size() < number) b.verseMax.resize(number, -1);
+				b.verseMax[number-1] = atoi(tag.getAttribute("verseMax"));
 			}
 		}
 		else if (tagName == "abbr" && inAbbrevs) {
@@ -551,8 +583,8 @@ bool VersificationMgr::registerVersificationSystemFromXML(const char *path, cons
 	}
 
 	SWBuf name = (overrideName && *overrideName) ? SWBuf(overrideName) : v11nID;
-	if (!name.length() || (otBooks.empty() && ntBooks.empty())) {
-		SWLog::getSystemLog()->logWarning("registerVersificationSystemFromXML: %s is not a versification definition", path);
+	if (!name.length() || (books.empty() && !base.length())) {
+		SWLog::getSystemLog()->logError("registerVersificationSystemFromXML: %s is not a versification definition", path);
 		return false;
 	}
 
@@ -565,28 +597,111 @@ bool VersificationMgr::registerVersificationSystemFromXML(const char *path, cons
 		return true;
 	}
 
+	// the final book list, ot then nt: the base's books, if any, with the
+	// definition's books merged in
+	vector<XBook> all;
+	const System *baseSys = 0;
+	if (base.length()) {
+		baseSys = getVersificationSystem(base.c_str());
+		if (!baseSys) {
+			SWLog::getSystemLog()->logError("registerVersificationSystemFromXML: %s: base versification %s is not registered", path, base.c_str());
+			return false;
+		}
+		const int *bmax = baseSys->getBMAX();
+		for (int i = 0; i < baseSys->getBookCount(); i++) {
+			const Book *b = baseSys->getBook(i);
+			XBook x;
+			x.name = b->getLongName(); x.osis = b->getOSISName(); x.prefAbbrev = b->getPreferredAbbreviation();
+			x.collection = b->getCollectionName();
+			x.testament = (i < bmax[0]) ? 1 : 2;
+			for (int c = 1; c <= b->getChapterMax(); c++) x.verseMax.push_back(b->getVerseMax(c));
+			all.push_back(x);
+		}
+		if (!refSys.length()) refSys = baseSys->getRefSys();
+	}
+	for (unsigned int i = 0; i < books.size(); i++) {
+		const XBook &d = books[i];
+		unsigned int j;
+		for (j = 0; j < all.size() && !(all[j].osis == d.osis); j++);
+		if (j < all.size()) {
+			// a book we have: patch what the definition lists
+			XBook &x = all[j];
+			if (d.name.length()) x.name = d.name;
+			if (d.prefAbbrev.length()) x.prefAbbrev = d.prefAbbrev;
+			if (d.collection.length()) x.collection = d.collection;
+			if (x.verseMax.size() < d.verseMax.size()) x.verseMax.resize(d.verseMax.size(), 0);
+			for (unsigned int c = 0; c < d.verseMax.size(); c++) {
+				if (d.verseMax[c] >= 0) x.verseMax[c] = d.verseMax[c];
+			}
+			if (d.after.length() || d.before.length())
+				SWLog::getSystemLog()->logWarning("registerVersificationSystemFromXML: %s: %s is a book of the base; its placement is ignored", path, d.osis.c_str());
+			continue;
+		}
+		// a new book: where it goes
+		XBook x = d;
+		for (unsigned int c = 0; c < x.verseMax.size(); c++) {
+			if (x.verseMax[c] < 0) {
+				SWLog::getSystemLog()->logWarning("registerVersificationSystemFromXML: %s: %s has no chapter %d", path, x.osis.c_str(), c+1);
+				x.verseMax[c] = 0;
+			}
+		}
+		SWBuf anchor = d.after.length() ? d.after : d.before;
+		unsigned int at = all.size();
+		if (anchor.length()) {
+			for (j = 0; j < all.size() && !(all[j].osis == anchor); j++);
+			if (j < all.size()) {
+				at = d.after.length() ? j+1 : j;
+				x.testament = all[j].testament;	// it sits with its anchor
+			}
+			else {
+				SWLog::getSystemLog()->logWarning("registerVersificationSystemFromXML: %s: %s: no book %s to place it by; appending", path, x.osis.c_str(), anchor.c_str());
+				anchor = "";
+			}
+		}
+		if (!anchor.length()) {
+			// the end of its testament: after the last book stored there,
+			// else (no such books yet) before the first of the other
+			at = 0;
+			for (j = 0; j < all.size(); j++) if (all[j].testament <= x.testament) at = j+1;
+		}
+		all.insert(all.begin() + at, x);
+	}
+
 	// build the sbook arrays (Books copy the strings; these are temporary)
 	vector<sbook> ot, nt;
+	vector<int> vm;
 	sbook sb, terminator;
 	terminator.name = ""; terminator.osis = ""; terminator.prefAbbrev = ""; terminator.chapmax = 0; terminator.versemax = 0;
-	for (unsigned int i = 0; i < otBooks.size(); i++) {
-		sb.name = otBooks[i].name.c_str(); sb.osis = otBooks[i].osis.c_str();
-		sb.prefAbbrev = otBooks[i].prefAbbrev.c_str(); sb.chapmax = otBooks[i].chapMax; sb.versemax = 0;
-		ot.push_back(sb);
+	for (unsigned int i = 0; i < all.size(); i++) {
+		const XBook &x = all[i];
+		sb.name = x.name.c_str(); sb.osis = x.osis.c_str();
+		sb.prefAbbrev = x.prefAbbrev.c_str(); sb.chapmax = (unsigned char)x.verseMax.size(); sb.versemax = 0;
+		(x.testament == 1 ? ot : nt).push_back(sb);
+		for (unsigned int c = 0; c < x.verseMax.size(); c++) vm.push_back(x.verseMax[c]);
 	}
 	ot.push_back(terminator);
-	for (unsigned int i = 0; i < ntBooks.size(); i++) {
-		sb.name = ntBooks[i].name.c_str(); sb.osis = ntBooks[i].osis.c_str();
-		sb.prefAbbrev = ntBooks[i].prefAbbrev.c_str(); sb.chapmax = ntBooks[i].chapMax; sb.versemax = 0;
-		nt.push_back(sb);
-	}
 	nt.push_back(terminator);
 
 	registerVersificationSystem(name.c_str(), &ot[0], &nt[0], vm.empty() ? 0 : &vm[0]);
 
 	System *s = const_cast<System *>(getVersificationSystem(name.c_str()));
 	if (s) {
+		for (unsigned int i = 0; i < all.size() && i < s->p->books.size(); i++) {
+			s->p->books[i].collectionName = all[i].collection;
+		}
 		s->p->setRefSys(refSys.c_str());	// before the abbreviations: it picks their seed table
+		// what the base brings, then what the definition adds
+		if (baseSys) {
+			for (int i = 0; i < baseSys->getMappingExtraBookCount(); i++) {
+				s->p->addMappingExtraBook(baseSys->getMappingExtraBook(i));
+			}
+			for (int i = 0; i < baseSys->getMappingRuleCount(); i++) {
+				System::MappingRule rule = *baseSys->getMappingRule(i);
+				rule.ourBookNum = rule.refBookNum = 0;
+				if (!s->p->addMappingRule(rule))
+					SWLog::getSystemLog()->logWarning("registerVersificationSystemFromXML: %s: unknown mapping book %s", name.c_str(), rule.ourBook);
+			}
+		}
 		for (unsigned int i = 0; i < extraBooks.size(); i++) {
 			s->p->addMappingExtraBook(extraBooks[i].c_str());
 		}
@@ -601,21 +716,23 @@ bool VersificationMgr::registerVersificationSystemFromXML(const char *path, cons
 			if (!s->p->addMappingRule(rule))
 				SWLog::getSystemLog()->logWarning("registerVersificationSystemFromXML: %s: unknown mapping book %s", name.c_str(), m.ourBook.c_str());
 		}
-		for (unsigned int i = 0; i < otBooks.size(); i++) {
-			s->p->addBookAbbrev(otBooks[i].name.c_str(), otBooks[i].osis.c_str());
-			s->p->addBookAbbrev(otBooks[i].osis.c_str(), otBooks[i].osis.c_str());
-			s->p->addBookAbbrev(otBooks[i].prefAbbrev.c_str(), otBooks[i].osis.c_str());
+		if (baseSys) {
+			for (int i = 0; i < baseSys->getAddedBookAbbrevCount(); i++) {
+				const char *ab, *osis;
+				baseSys->getAddedBookAbbrev(i, &ab, &osis);
+				s->p->addBookAbbrev(ab, osis);
+			}
 		}
-		for (unsigned int i = 0; i < ntBooks.size(); i++) {
-			s->p->addBookAbbrev(ntBooks[i].name.c_str(), ntBooks[i].osis.c_str());
-			s->p->addBookAbbrev(ntBooks[i].osis.c_str(), ntBooks[i].osis.c_str());
-			s->p->addBookAbbrev(ntBooks[i].prefAbbrev.c_str(), ntBooks[i].osis.c_str());
+		for (unsigned int i = 0; i < all.size(); i++) {
+			s->p->addBookAbbrev(all[i].name.c_str(), all[i].osis.c_str());
+			s->p->addBookAbbrev(all[i].osis.c_str(), all[i].osis.c_str());
+			s->p->addBookAbbrev(all[i].prefAbbrev.c_str(), all[i].osis.c_str());
 		}
 		for (unsigned int i = 0; i < abbrevs.size(); i++) {
 			s->p->addBookAbbrev(abbrevs[i].first.c_str(), abbrevs[i].second.c_str());
 		}
 	}
-	SWLog::getSystemLog()->logInformation("registerVersificationSystemFromXML: registered %s from %s", name.c_str(), path);
+	SWLog::getSystemLog()->logInformation("registerVersificationSystemFromXML: registered %s from %s%s%s", name.c_str(), path, baseSys ? " on base " : "", baseSys ? base.c_str() : "");
 	return true;
 }
 
@@ -625,6 +742,7 @@ VersificationMgr::Book::Book(const Book &other) {
 	osisName = other.osisName;
 	prefAbbrev = other.prefAbbrev;
 	chapMax = other.chapMax;
+	collectionName = other.collectionName;
 	init();
 	(*p) = *(other.p);
 }
@@ -635,6 +753,7 @@ VersificationMgr::Book& VersificationMgr::Book::operator =(const Book &other) {
 	osisName = other.osisName;
 	prefAbbrev = other.prefAbbrev;
 	chapMax = other.chapMax;
+	collectionName = other.collectionName;
 	init();
 	(*p) = *(other.p);
 	return *this;

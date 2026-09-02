@@ -71,9 +71,18 @@ void dumpXML(const VersificationMgr::System *s, const char *name) {
 	for (int collection = 1; collection <= 2; ++collection) {
 		int count = bmax[collection-1];
 		if (!count) continue;
-		cout << "\t<collection collectionID=\"" << collection << "\">\n";
+		// a run of books under another collection name (an appendix, the
+		// apocrypha) is its own collection element, in the same testament
+		SWBuf collectionName;
 		for (int i = 0; i < count; ++i, ++bookNum) {
 			const VersificationMgr::Book *b = s->getBook(bookNum);
+			if (!i || collectionName != b->getCollectionName()) {
+				if (i) cout << "\t</collection>\n";
+				collectionName = b->getCollectionName();
+				cout << "\t<collection collectionID=\"" << collection << "\"";
+				if (collectionName.length()) cout << " name=\"" << xmlEscape(collectionName) << "\"";
+				cout << ">\n";
+			}
 			cout << "\t\t<book osisID=\"" << xmlEscape(b->getOSISName())
 			     << "\" preferredAbbrev=\"" << xmlEscape(b->getPreferredAbbreviation())
 			     << "\" name=\"" << xmlEscape(b->getLongName())

@@ -1,0 +1,57 @@
+register: ok
+system found: ok
+base bookCount: 78 Ps chapters: 150
+bookCount: 82 (base + 4)
+BMAX: 48 34
+refSys: Bible
+end of OT:
+  45 1Macc (I Maccabees, 1Macc) chapters: 16 lastVerseMax: 24
+  46 2Macc (II Maccabees, 2Macc) chapters: 15 lastVerseMax: 40
+  47 3Macc (III Maccabees, 3Macc) chapters: 2 lastVerseMax: 33
+  48 4Macc (IV Maccabees, 4Macc) chapters: 1 lastVerseMax: 35 collection: Apocrypha
+  49 Matt (Matthew, Matt) chapters: 28 lastVerseMax: 20
+end of NT:
+  75 Rev (Revelation of John, Rev) chapters: 22 lastVerseMax: 21
+  76 PrMan (Prayer of Manasses, PrMan) chapters: 1 lastVerseMax: 15
+  77 1Esd (I Esdras, 1Esd) chapters: 9 lastVerseMax: 56
+  78 2Esd (II Esdras, 2Esd) chapters: 16 lastVerseMax: 78
+  79 AddPs (Additional Psalm, AddPs) chapters: 1 lastVerseMax: 7
+  80 EpLao (Laodiceans, EpLao) chapters: 1 lastVerseMax: 20 collection: Appendix
+  81 Barn (Epistle of Barnabas, Barn) chapters: 2 lastVerseMax: 10 collection: Appendix
+  82 Herm (Shepherd of Hermas, Herm) chapters: 3 lastVerseMax: 5 collection: Appendix
+patched:
+  21 Ps (Psalms, Ps) chapters: 151 lastVerseMax: 7
+  Ps.150 verseMax: 6
+  49 Matt (Matthew, Matt) chapters: 28 lastVerseMax: 20
+  Matt.1 verseMax: 26
+  Matt.2 verseMax: 23
+mapping rules: base 273 delta 273
+extra books: base 4 delta 4
+abbr parse: Herm.2.3
+name parse: Barn.1.8
+osis parse: Ps.151.7
+after Rev 22:21 comes: PrMan.1.1
+after Herm 3:5: Herm.3.5 error 1
+after 2Macc 15:40 comes: 3Macc.1.1
+Ps 146:1 in KJV: Ps.147.1
+Ps 147:1 in KJV: Ps.147.12
+re-register: ok
+bad base register: refused
+bad base system found: no
+--- v11ndump
+	<collection collectionID="1">
+		<book osisID="Ps" preferredAbbrev="Ps" name="Psalms" bookNum="21" chapterMax="151">
+		<book osisID="2Macc" preferredAbbrev="2Macc" name="II Maccabees" bookNum="46" chapterMax="15">
+		<book osisID="3Macc" preferredAbbrev="3Macc" name="III Maccabees" bookNum="47" chapterMax="2">
+	</collection>
+	<collection collectionID="1" name="Apocrypha">
+		<book osisID="4Macc" preferredAbbrev="4Macc" name="IV Maccabees" bookNum="48" chapterMax="1">
+	</collection>
+	<collection collectionID="2">
+		<book osisID="Rev" preferredAbbrev="Rev" name="Revelation of John" bookNum="27" chapterMax="22">
+	</collection>
+	<collection collectionID="2" name="Appendix">
+		<book osisID="EpLao" preferredAbbrev="EpLao" name="Laodiceans" bookNum="32" chapterMax="1">
+		<book osisID="Barn" preferredAbbrev="Barn" name="Epistle of Barnabas" bookNum="33" chapterMax="2">
+		<book osisID="Herm" preferredAbbrev="Herm" name="Shepherd of Hermas" bookNum="34" chapterMax="3">
+	</collection>
