@@ -186,6 +186,8 @@ void init() {
 
 
 // clean up and exit if status is 0 or negative error code
+//   -1 usage error; -2 SWORD not configured; -3 remote source not found;
+//   -4 module not found; -5 install or refresh failed; -6 cancelled by user
 void finish(int status) {
 	delete statusReporter;
 	delete installMgr;
@@ -307,11 +309,15 @@ void refreshRemoteSource(const char *sourceName) {
 	}
 
 	int error = installMgr->refreshRemoteSource(source->second);
-	if (!error)
-		cout << "\nRemote Source Refreshed\n";
-	else if (error == -1)
+	if (error == -1) {
 		cerr << "\nRefresh cancelled\n";
-	else	cerr << "\nError Refreshing Remote Source (" << error << ")\n";
+		finish(-6);
+	}
+	else if (error) {
+		cerr << "\nError Refreshing Remote Source (" << error << ")\n";
+		finish(-5);
+	}
+	cout << "\nRemote Source Refreshed\n";
 }
 
 
@@ -405,11 +411,14 @@ void remoteInstallModule(const char *sourceName, const char *modName) {
 
 	int error = installMgr->installModule(mgr, 0, module->getName(), is);
 	if (error == -1) {
-		cout << "\nInstall cancelled: [" << module->getName() << "]\n";
+		cerr << "\nInstall cancelled: [" << module->getName() << "]\n";
+		finish(-6);
 	}
 	else if (error) {
-		cout << "\nError installing module: [" << module->getName() << "] (" << error << ")\n";
-	} else cout << "\nInstalled module: [" << module->getName() << "]\n";
+		cerr << "\nError installing module: [" << module->getName() << "] (" << error << ")\n";
+		finish(-5);
+	}
+	cout << "\nInstalled module: [" << module->getName() << "]\n";
 }
 
 
@@ -423,8 +432,10 @@ void localDirInstallModule(const char *dir, const char *modName) {
 	}
 	int error = installMgr->installModule(mgr, dir, module->getName());
 	if (error) {
-		cout << "\nError installing module: [" << module->getName() << "] (" << error << "; write permissions?)\n";
-	} else cout << "\nInstalled module: [" << module->getName() << "]\n";
+		cerr << "\nError installing module: [" << module->getName() << "] (" << error << "; write permissions?)\n";
+		finish(-5);
+	}
+	cout << "\nInstalled module: [" << module->getName() << "]\n";
 }
 
 
