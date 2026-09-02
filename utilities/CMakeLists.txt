@@ -27,6 +27,7 @@ SET(install_UTILITIES
 	vs2osisreftxt
 	xml2gbs
 	osis2mod
+	v11ndump
 )
 
 IF(WITH_ZLIB OR WITH_INTERNAL_ZLIB)

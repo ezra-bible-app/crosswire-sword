@@ -30,8 +30,10 @@
 #include <filemgr.h>
 #include <utilxml.h>
 #include <stringmgr.h>
+#include <swlocale.h>
 #include <list>
 #include <algorithm>
+#include <ctype.h>
 
 #include <canon_null.h>		// null v11n system
 
@@ -106,23 +108,154 @@ public:
 		in reference system, in this case @variable mappingsExtraBooks data is used and
 		id is rule book id minus book count.
 	*/
-	typedef vector<const unsigned char*> mappingRule;
-	vector<mappingRule> mappings;
-	vector<const char*> mappingsExtraBooks;
-	/** (uppercased abbreviation, osis) pairs, sorted on demand; SWBuf pairs
-	 * copy safely with the System */
-	vector< std::pair<SWBuf, SWBuf> > ownAbbrevs;
-	bool ownAbbrevsSorted;
+	typedef VersificationMgr::System::MappingRule MappingRule;
+	/** all rules, in the order they were added (translateVerse relies on
+	 * this order).  addMappingRule interns the name fields into our own
+	 * storage (what came in may have been transient), so stored rules are
+	 * valid at all times */
+	vector<MappingRule> mappingRules;
+	/** for each book (index = 1-based book number - 1), the indices into
+	 * mappingRules of the rules that involve it.  An inter-book rule is
+	 * listed under both of its books.  Sized books.size() + mappingsExtraBooks.size() */
+	vector< vector<int> > rulesByBook;
+	/** reference-system books this system lacks but its rules refer to;
+	 * numbered after our own books: books.size()+1, ...  A list, so growth
+	 * never moves the names that stored rules point into (books are frozen
+	 * before the first rule; these are the only other referent) */
+	std::list<SWBuf> mappingsExtraBooks;
+	const char *bookOSISName(int bookNumber) const {	// our book or extra book
+		if (bookNumber >= 1 && bookNumber <= (int)books.size()) return books[bookNumber-1].getOSISName();
+		int extra = bookNumber - (int)books.size() - 1;
+		if (extra < 0 || extra >= (int)mappingsExtraBooks.size()) return "";
+		std::list<SWBuf>::const_iterator it = mappingsExtraBooks.begin();
+		while (extra--) ++it;
+		return it->c_str();
+	}
 
-	Private() {
+	SWBuf refSys;	// "Bible" unless the definition says otherwise
+	/** the builtin abbreviation table that seeds this system's merged
+	 * table (and that additions are deduped against): canon_abbrevs.h
+	 * for Bible; an empty table for any other corpus, until one exists */
+	const struct abbrev *seedAbbrevs() const {
+		static const struct abbrev none[] = { { "", "" } };
+		return (refSys == "Bible") ? builtin_abbrevs : none;
+	}
+	/** the system's own additions to the seed table: UPPERCASED abbreviation -> osisID */
+	struct BookAbbrev {
+		SWBuf abbrev, osis;
+		BookAbbrev(const SWBuf &abbrev, const SWBuf &osis) : abbrev(abbrev), osis(osis) {}
+	};
+	vector<BookAbbrev> bookAbbrevs;
+	/** builtin + additions + one locale's entries, merged and sorted */
+	struct MergedAbbrevs {
+		map<SWBuf, SWBuf> entries;
+		vector<struct abbrev> table;	// points into entries
+	};
+	/** one merged table per locale name, built on demand.  A copy of the
+	 * System starts with an empty cache (the tables point into their own
+	 * maps, so they can't be copied cheaply) */
+	struct MergedAbbrevsCache {
+		map<SWBuf, MergedAbbrevs *> byLocale;
+		MergedAbbrevsCache() {}
+		MergedAbbrevsCache(const MergedAbbrevsCache &) {}
+		MergedAbbrevsCache &operator=(const MergedAbbrevsCache &) { clear(); return *this; }
+		~MergedAbbrevsCache() { clear(); }
+		void clear() {
+			for (map<SWBuf, MergedAbbrevs *>::iterator it = byLocale.begin(); it != byLocale.end(); ++it) delete it->second;
+			byLocale.clear();
+		}
+	} mergedAbbrevs;
+
+	void ensureRulesByBookSize() {
+		size_t n = books.size() + mappingsExtraBooks.size();
+		if (rulesByBook.size() < n) rulesByBook.resize(n);
+	}
+
+	// -- construction, driven by VersificationMgr's registration paths --
+
+	int bookNumberByOSISName(const char *bookName) const {	// 1-based, or -1
+		map<SWBuf, int>::const_iterator it = osisLookup.find(bookName);
+		return (it != osisLookup.end()) ? it->second : -1;
+	}
+
+	/** the osisID of a book of this system or of a mapping extra book;
+	 * returns the 1-based book number, or 0 if unknown */
+	int resolveMappingBook(const char *book) const {
+		if (!book || !*book) return 0;
+		int n = bookNumberByOSISName(book);
+		if (n > 0) return n;
+		int i = 0;
+		for (std::list<SWBuf>::const_iterator it = mappingsExtraBooks.begin(); it != mappingsExtraBooks.end(); ++it, ++i) {
+			if (*it == book) return (int)books.size() + i + 1;
+		}
+		return 0;
+	}
+
+	void addMappingExtraBook(const char *osisName) {
+		mappingsExtraBooks.push_back(SWBuf(osisName));
+		ensureRulesByBookSize();
+	}
+
+	/** a refBook not in this system is added as an extra book
+	 * automatically; returns false if ourBook is unknown */
+	bool addMappingRule(MappingRule rule) {
+		rule.ourBookNum = resolveMappingBook(rule.ourBook);
+		if (rule.ourBookNum < 1 || rule.ourBookNum > (int)books.size()) return false;
+		rule.refBookNum = 0;
+		if (rule.refBook && *rule.refBook) {
+			rule.refBookNum = resolveMappingBook(rule.refBook);
+			if (!rule.refBookNum) {
+				addMappingExtraBook(rule.refBook);
+				rule.refBookNum = resolveMappingBook(rule.refBook);
+			}
+		}
+		// intern the names into our own storage: books are frozen before the
+		// first rule, and extra books live in a list, so these never move
+		rule.ourBook = bookOSISName(rule.ourBookNum);
+		rule.refBook = rule.refBookNum ? bookOSISName(rule.refBookNum) : 0;
+		ensureRulesByBookSize();
+		mappingRules.push_back(rule);
+		int idx = (int)mappingRules.size() - 1;
+		rulesByBook[rule.ourBookNum-1].push_back(idx);
+		// an inter-book rule is also listed under its reference book
+		if (rule.refBookNum && rule.refBookNum != rule.ourBookNum)
+			rulesByBook[rule.refBookNum-1].push_back(idx);
+		return true;
+	}
+
+	/** anything the refSys's builtin table already says is dropped -- an
+	 * optimization; the merged result is the same.  Stored uppercased */
+	void addBookAbbrev(const char *abbrev, const char *osisID) {
+		if (!abbrev || !*abbrev || !osisID || !*osisID) return;
+		SWBuf upper = abbrev;
+		upper.toUpper();
+		const struct abbrev *seed = seedAbbrevs();
+		for (int j = 0; seed[j].osis[0]; ++j) {
+			if (upper == seed[j].ab && !strcmp(osisID, seed[j].osis)) return;
+		}
+		for (unsigned int i = 0; i < bookAbbrevs.size(); ++i) {
+			if (bookAbbrevs[i].abbrev == upper && bookAbbrevs[i].osis == osisID) return;
+		}
+		bookAbbrevs.push_back(BookAbbrev(upper, SWBuf(osisID)));
+		mergedAbbrevs.clear();	// stale now
+	}
+
+	void setRefSys(const char *newRefSys) {
+		refSys = (newRefSys && *newRefSys) ? newRefSys : "Bible";
+		mergedAbbrevs.clear();	// seeded from a different table now
+	}
+
+	Private() : refSys("Bible") {
 	}
 	Private(const VersificationMgr::System::Private &other) {
 		books = other.books;
 		osisLookup = other.osisLookup;
+		refSys = other.refSys;
 	}
 	VersificationMgr::System::Private &operator =(const VersificationMgr::System::Private &other) {
 		books = other.books;
 		osisLookup = other.osisLookup;
+		refSys = other.refSys;
 		return *this;
 	}
 };
@@ -210,7 +343,7 @@ int VersificationMgr::System::getBookNumberByOSISName(const char *bookName) cons
 }
 
 
-void VersificationMgr::System::loadFromSBook(const sbook *ot, const sbook *nt, int *chMax, const unsigned char *mappings) {
+void VersificationMgr::System::loadFromSBook(const sbook *ot, const sbook *nt, int *chMax) {
 	int chap = 0;
 	int book = 0;
 	long offset = 0;	// module heading
@@ -252,76 +385,74 @@ void VersificationMgr::System::loadFromSBook(const sbook *ot, const sbook *nt, i
 	BMAX[1] = book;
 
 	// TODO: build offset speed array
+}
 
-	// parse mappings
-	if (mappings != NULL) {
-		const unsigned char *m=mappings;
-		for (; *m != 0; m += strlen((const char*)m)+1) {
-			p->mappingsExtraBooks.push_back((const char*)m);
+
+const char *VersificationMgr::System::getRefSys() const {
+	return p->refSys.c_str();
+}
+
+
+const VersificationMgr::System::MappingRule *VersificationMgr::System::getMappingRule(int i) const {
+	return (i >= 0 && i < (int)p->mappingRules.size()) ? &p->mappingRules[i] : 0;
+}
+
+
+const struct abbrev *VersificationMgr::System::getBookAbbrevs(SWLocale *locale, int *retSize) const {
+	int localeCount = 0;
+	const struct abbrev *localeAbbrevs = locale ? locale->getLocaleBookAbbrevs(&localeCount) : 0;
+	const struct abbrev *seed = p->seedAbbrevs();
+	if (p->bookAbbrevs.empty() && !localeCount) {
+		// nothing to merge: the seed table serves as is
+		int n = 0;
+		while (seed[n].osis[0]) ++n;
+		*retSize = n;
+		return seed;
+	}
+	SWBuf key = locale ? locale->getName() : "";
+	Private::MergedAbbrevs *&merged = p->mergedAbbrevs.byLocale[key];
+	if (!merged) {
+		merged = new Private::MergedAbbrevs();
+		for (int j = 0; seed[j].osis[0]; ++j) merged->entries[seed[j].ab] = seed[j].osis;
+		for (unsigned int i = 0; i < p->bookAbbrevs.size(); ++i) merged->entries[p->bookAbbrevs[i].abbrev] = p->bookAbbrevs[i].osis;
+		for (int i = 0; i < localeCount; ++i) merged->entries[localeAbbrevs[i].ab] = localeAbbrevs[i].osis;
+		merged->table.reserve(merged->entries.size() + 1);
+		for (map<SWBuf, SWBuf>::const_iterator it = merged->entries.begin(); it != merged->entries.end(); ++it) {
+			struct abbrev a = { it->first.c_str(), it->second.c_str() };
+			merged->table.push_back(a);
 		}
-		p->mappings.resize(p->books.size()+p->mappingsExtraBooks.size());
-
-		for (++m; *m != 0; m += 7) {
-			p->mappings[m[0]-1].push_back(m);
-			if (*m > p->books.size()) {
-				p->mappings[m[7]-1].push_back(m);
-				m += 1;
-			}
-		}
+		struct abbrev end = { "", "" };
+		merged->table.push_back(end);
 	}
+	*retSize = (int)merged->table.size() - 1;
+	return &merged->table[0];
 }
 
 
-// under C++20, std::pair's synthesized comparison sees SWBuf's implicit
-// const char* conversion and compares POINTERS; compare contents explicitly
-struct AbbrevPairLess {
-	bool operator()(const std::pair<SWBuf, SWBuf> &a, const std::pair<SWBuf, SWBuf> &b) const {
-		int c = strcmp(a.first.c_str(), b.first.c_str());
-		if (c) return c < 0;
-		return strcmp(a.second.c_str(), b.second.c_str()) < 0;
-	}
-};
-
-
-bool VersificationMgr::System::hasOwnAbbrevs() const {
-	return !p->ownAbbrevs.empty();
+int VersificationMgr::System::getAddedBookAbbrevCount() const {
+	return (int)p->bookAbbrevs.size();
 }
 
 
-void VersificationMgr::System::addOwnAbbrev(const char *abbrev, const char *osis) {
-	if (!abbrev || !*abbrev || !osis || !*osis) return;
-	SWBuf upper = abbrev;
-	upper.toUpper();
-	p->ownAbbrevs.push_back(std::make_pair(upper, SWBuf(osis)));
-	p->ownAbbrevsSorted = false;
+void VersificationMgr::System::getAddedBookAbbrev(int i, const char **abbrev, const char **osisID) const {
+	*abbrev = 0; *osisID = 0;
+	if (i < 0 || i >= (int)p->bookAbbrevs.size()) return;
+	*abbrev = p->bookAbbrevs[i].abbrev.c_str();
+	*osisID = p->bookAbbrevs[i].osis.c_str();
 }
 
 
-int VersificationMgr::System::getBookNumberByAbbrev(const char *upperAbbrev) const {
-	if (p->ownAbbrevs.empty() || !upperAbbrev || !*upperAbbrev) return -1;
-	if (!p->ownAbbrevsSorted) {
-		std::sort(p->ownAbbrevs.begin(), p->ownAbbrevs.end(), AbbrevPairLess());
-		p->ownAbbrevsSorted = true;
-	}
-	int abLen = (int)strlen(upperAbbrev);
-	int min = 0, max = (int)p->ownAbbrevs.size(), target = 0, diff = 1;
-	// binary search for a prefix match, same manners as the locale table
-	while (true) {
-		target = min + ((max - min) / 2);
-		diff = strncmp(upperAbbrev, p->ownAbbrevs[target].first.c_str(), abLen);
-		if ((!diff) || (target >= max) || (target <= min)) break;
-		if (diff > 0) min = target; else max = target;
-	}
-	for (; target > 0; target--) {
-		if (strncmp(upperAbbrev, p->ownAbbrevs[target-1].first.c_str(), abLen)) break;
-	}
-	if (diff) return -1;
-	int retVal = getBookNumberByOSISName(p->ownAbbrevs[target].second.c_str());
-	while ((retVal < 0) && (target < (int)p->ownAbbrevs.size()-1) && (!strncmp(upperAbbrev, p->ownAbbrevs[target+1].first.c_str(), abLen))) {
-		target++;
-		retVal = getBookNumberByOSISName(p->ownAbbrevs[target].second.c_str());
-	}
-	return retVal;
+int VersificationMgr::System::getMappingRuleCount() const {
+	return (int)p->mappingRules.size();
+}
+
+
+int VersificationMgr::System::getMappingExtraBookCount() const { return (int)p->mappingsExtraBooks.size(); }
+
+
+const char *VersificationMgr::System::getMappingExtraBook(int i) const {
+	if (i < 0 || i >= (int)p->mappingsExtraBooks.size()) return 0;
+	return p->bookOSISName((int)p->books.size() + i + 1);
 }
 
 
@@ -342,13 +473,15 @@ bool VersificationMgr::registerVersificationSystemFromXML(const char *path, cons
 	FileMgr::getSystemFileMgr()->close(fd);
 
 	// stream the tags
-	SWBuf v11nID;
+	SWBuf v11nID, refSys;
 	struct XBook { SWBuf name, osis, prefAbbrev; int chapMax; };
 	vector<XBook> otBooks, ntBooks;
 	vector<int> vm;
 	vector< std::pair<SWBuf, SWBuf> > abbrevs;	// (abbrev text, osis)
 	vector<SWBuf> extraBooks;
-	struct XMap { int book, toChapter, toVerse, toVerseMax, fromChapter, fromVerse, fromVerseMax, fromOtherBook; };
+	// <map> with the MappingRule attribute names (ourBook, ourChapter, ...,
+	// refBook, ...), books as osisIDs; resolved once the book list is complete
+	struct XMap { SWBuf ourBook, refBook; int ourChapter, ourVerse, ourVerseMax, refChapter, refVerse, refVerseMax; };
 	vector<XMap> maps;
 
 	int collection = 0;		// 1 = ot, 2 = nt
@@ -368,7 +501,7 @@ bool VersificationMgr::registerVersificationSystemFromXML(const char *path, cons
 		SWBuf tagName = isEnd ? SWBuf(tagText.c_str()+1) : SWBuf(tag.getName());
 		tagName.trim();
 
-		if (!isEnd && tagName == "v11n") { v11nID = tag.getAttribute("v11nID"); }
+		if (!isEnd && tagName == "v11n") { v11nID = tag.getAttribute("v11nID"); refSys = tag.getAttribute("refSys"); }
 		else if (tagName == "collection") { collection = isEnd ? 0 : atoi(tag.getAttribute("collectionID")); }
 		else if (tagName == "abbreviations") { inAbbrevs = !isEnd; }
 		else if (tagName == "mappings") { inMappings = !isEnd; }
@@ -405,14 +538,14 @@ bool VersificationMgr::registerVersificationSystemFromXML(const char *path, cons
 		}
 		else if (!isEnd && tagName == "map" && inMappings) {
 			XMap m;
-			m.book = atoi(tag.getAttribute("book"));
-			m.toChapter = atoi(tag.getAttribute("toChapter"));
-			m.toVerse = atoi(tag.getAttribute("toVerse"));
-			m.toVerseMax = atoi(tag.getAttribute("toVerseMax"));
-			m.fromChapter = atoi(tag.getAttribute("fromChapter"));
-			m.fromVerse = atoi(tag.getAttribute("fromVerse"));
-			m.fromVerseMax = atoi(tag.getAttribute("fromVerseMax"));
-			m.fromOtherBook = atoi(tag.getAttribute("fromOtherBook"));
+			m.ourBook = tag.getAttribute("ourBook");
+			m.refBook = tag.getAttribute("refBook");
+			m.ourChapter = atoi(tag.getAttribute("ourChapter"));
+			m.ourVerse = atoi(tag.getAttribute("ourVerse"));
+			m.ourVerseMax = atoi(tag.getAttribute("ourVerseMax"));
+			m.refChapter = atoi(tag.getAttribute("refChapter"));
+			m.refVerse = atoi(tag.getAttribute("refVerse"));
+			m.refVerseMax = atoi(tag.getAttribute("refVerseMax"));
 			maps.push_back(m);
 		}
 	}
@@ -449,50 +582,37 @@ bool VersificationMgr::registerVersificationSystemFromXML(const char *path, cons
 	}
 	nt.push_back(terminator);
 
-	// the mapping blob is held by pointer inside the System, so it lives
-	// for the life of the process alongside it
-	const unsigned char *blobPtr = 0;
-	if (maps.size() || extraBooks.size()) {
-		static std::list< vector<unsigned char> > keeper;
-		vector<unsigned char> blob;
-		for (unsigned int i = 0; i < extraBooks.size(); i++) {
-			const char *n = extraBooks[i].c_str();
-			blob.insert(blob.end(), (const unsigned char *)n, (const unsigned char *)n + strlen(n) + 1);
-		}
-		blob.push_back(0);
-		int bookCount = (int)(otBooks.size() + ntBooks.size());
-		for (unsigned int i = 0; i < maps.size(); i++) {
-			const XMap &m = maps[i];
-			blob.push_back((unsigned char)m.book);
-			blob.push_back((unsigned char)m.toChapter);
-			blob.push_back((unsigned char)m.toVerse);
-			blob.push_back((unsigned char)m.toVerseMax);
-			blob.push_back((unsigned char)m.fromChapter);
-			blob.push_back((unsigned char)m.fromVerse);
-			blob.push_back((unsigned char)m.fromVerseMax);
-			if (m.book > bookCount) blob.push_back((unsigned char)m.fromOtherBook);
-		}
-		blob.push_back(0);
-		keeper.push_back(blob);
-		blobPtr = &(keeper.back())[0];
-	}
-
-	registerVersificationSystem(name.c_str(), &ot[0], &nt[0], vm.empty() ? 0 : &vm[0], blobPtr);
+	registerVersificationSystem(name.c_str(), &ot[0], &nt[0], vm.empty() ? 0 : &vm[0]);
 
 	System *s = const_cast<System *>(getVersificationSystem(name.c_str()));
 	if (s) {
+		s->p->setRefSys(refSys.c_str());	// before the abbreviations: it picks their seed table
+		for (unsigned int i = 0; i < extraBooks.size(); i++) {
+			s->p->addMappingExtraBook(extraBooks[i].c_str());
+		}
+		for (unsigned int i = 0; i < maps.size(); i++) {
+			const XMap &m = maps[i];
+			System::MappingRule rule;
+			rule.ourBookNum = rule.refBookNum = 0;
+			rule.ourBook = m.ourBook.c_str();
+			rule.refBook = m.refBook.length() ? m.refBook.c_str() : 0;
+			rule.ourChapter = m.ourChapter; rule.ourVerse = m.ourVerse; rule.ourVerseMax = m.ourVerseMax;
+			rule.refChapter = m.refChapter; rule.refVerse = m.refVerse; rule.refVerseMax = m.refVerseMax;
+			if (!s->p->addMappingRule(rule))
+				SWLog::getSystemLog()->logWarning("registerVersificationSystemFromXML: %s: unknown mapping book %s", name.c_str(), m.ourBook.c_str());
+		}
 		for (unsigned int i = 0; i < otBooks.size(); i++) {
-			s->addOwnAbbrev(otBooks[i].name.c_str(), otBooks[i].osis.c_str());
-			s->addOwnAbbrev(otBooks[i].osis.c_str(), otBooks[i].osis.c_str());
-			s->addOwnAbbrev(otBooks[i].prefAbbrev.c_str(), otBooks[i].osis.c_str());
+			s->p->addBookAbbrev(otBooks[i].name.c_str(), otBooks[i].osis.c_str());
+			s->p->addBookAbbrev(otBooks[i].osis.c_str(), otBooks[i].osis.c_str());
+			s->p->addBookAbbrev(otBooks[i].prefAbbrev.c_str(), otBooks[i].osis.c_str());
 		}
 		for (unsigned int i = 0; i < ntBooks.size(); i++) {
-			s->addOwnAbbrev(ntBooks[i].name.c_str(), ntBooks[i].osis.c_str());
-			s->addOwnAbbrev(ntBooks[i].osis.c_str(), ntBooks[i].osis.c_str());
-			s->addOwnAbbrev(ntBooks[i].prefAbbrev.c_str(), ntBooks[i].osis.c_str());
+			s->p->addBookAbbrev(ntBooks[i].name.c_str(), ntBooks[i].osis.c_str());
+			s->p->addBookAbbrev(ntBooks[i].osis.c_str(), ntBooks[i].osis.c_str());
+			s->p->addBookAbbrev(ntBooks[i].prefAbbrev.c_str(), ntBooks[i].osis.c_str());
 		}
 		for (unsigned int i = 0; i < abbrevs.size(); i++) {
-			s->addOwnAbbrev(abbrevs[i].first.c_str(), abbrevs[i].second.c_str());
+			s->p->addBookAbbrev(abbrevs[i].first.c_str(), abbrevs[i].second.c_str());
 		}
 	}
 	SWLog::getSystemLog()->logInformation("registerVersificationSystemFromXML: registered %s from %s", name.c_str(), path);
@@ -650,10 +770,14 @@ const VersificationMgr::System *VersificationMgr::getVersificationSystem(const c
 }
 
 
-void VersificationMgr::registerVersificationSystem(const char *name, const sbook *ot, const sbook *nt, int *chMax, const unsigned char *mappings) {
-	p->systems[name] = name;
+void VersificationMgr::registerVersificationSystem(const char *name, const sbook *ot, const sbook *nt, int *chMax, const System::MappingRule *rules) {
+	p->systems[name] = System(name);
 	System &s = p->systems[name];
-	s.loadFromSBook(ot, nt, chMax, mappings);
+	s.loadFromSBook(ot, nt, chMax);
+	for (int i = 0; rules && rules[i].ourBook; ++i) {
+		if (!s.p->addMappingRule(rules[i]))
+			SWLog::getSystemLog()->logWarning("registerVersificationSystem: %s: unknown mapping book %s", name, rules[i].ourBook);
+	}
 }
 
 
@@ -682,67 +806,53 @@ void VersificationMgr::System::translateVerse(const System *dstSys, const char *
 		//dbg_mapping SWLOGD("\tgetBookNumberByOSISName %i %s.\n", b, *book);
 
 		if (b < 0) {
-			//dbg_mapping SWLOGD("\tmappingsExtraBooks.size() %i.\n", dstSys->p->mappingsExtraBooks.size());
-			for (int i=0; i<(int)dstSys->p->mappingsExtraBooks.size(); ++i) {
-				//dbg_mapping SWLOGD("\t%s %s.\n", *book, dstSys->p->mappingsExtraBooks[i]);
-				if (!strcmp(*book, dstSys->p->mappingsExtraBooks[i])) {
-					b = (int)p->books.size()+i-2;
-					break;
-				}
-			}
+			int extraNum = dstSys->p->resolveMappingBook(*book);	// extra books resolve past the book count
+			if (extraNum > (int)dstSys->p->books.size()) b = extraNum - 1;
 		}
 
 		//dbg_mapping SWLOGD("\tb %i.\n", b);
 
-		if (b >= (int)dstSys->p->mappings.size() || b < 0) {
+		if (b >= (int)dstSys->p->rulesByBook.size() || b < 0) {
 			//dbg_mapping SWLOGD("no modification");
 			return;
 		}
 		
-		const unsigned char *a = NULL;
+		const Private::MappingRule *a = NULL;
 		
 		// reversed mapping should use forward search for item
-		for (unsigned int i=0; i<dstSys->p->mappings[b].size(); ++i) {
-			const unsigned char *m = dstSys->p->mappings[b][i];
+		for (unsigned int i=0; i<dstSys->p->rulesByBook[b].size(); ++i) {
+			const Private::MappingRule &m = dstSys->p->mappingRules[dstSys->p->rulesByBook[b][i]];
 
-			if (m[0] != b+1) continue; // filter inter-book rules
+			// we are looking up by the reference book: skip inter-book rules
+			// listed here under their (our) destination book
+			if ((m.refBookNum ? m.refBookNum : m.ourBookNum) != b+1) continue;
 
-			if (m[4] == *chapter && m[5] <= *verse) {
-				//dbg_mapping SWLOGD("found mapping %i %i %i %i %i %i\n",m[1],m[2],m[3],m[4],m[5],m[6]);
-				if (m[5] == *verse || (m[6] >= *verse && m[5] <= *verse)) {
+			if (m.refChapter == *chapter && m.refVerse <= *verse) {
+				if (m.refVerse == *verse || (m.refVerseMax >= *verse && m.refVerse <= *verse)) {
 					// inside of any mapping range
-					*chapter = m[1];
-					*verse = m[2];
-					*verse_end = m[3];
-					if (*m >= dstSys->p->books.size()) {
-						SWLog::getSystemLog()->logWarning("map to extra books, possible bug source\n");
-						*book = dstSys->getBook(m[7]-1)->getOSISName();
-					}
+					*chapter = m.ourChapter;
+					*verse = m.ourVerse;
+					*verse_end = m.ourVerseMax;
+					if (m.refBookNum) *book = dstSys->p->bookOSISName(m.ourBookNum);
 					return;
 				}
 				// destination mapping can have duplicate items, use the last (by using <=)
-				if (a == NULL || (a[5]>a[6]?a[5]:a[6]) <= (m[5]>m[6]?m[5]:m[6]))
-					a = m;
+				if (a == NULL || (a->refVerse>a->refVerseMax?a->refVerse:a->refVerseMax) <= (m.refVerse>m.refVerseMax?m.refVerse:m.refVerseMax))
+					a = &m;
 			}
 		}
 		if (a != NULL) {
-			//dbg_mapping SWLOGD("set appropriate: %i %i %i %i %i %i\n",a[1],a[2],a[3],a[4],a[5],a[6]);
-			(*chapter) = a[1];
+			(*chapter) = a->ourChapter;
 			// shift verse
-			const int d = (a[3]>a[2]?a[3]:a[2])-(a[6]>a[5]?a[6]:a[5]);
+			const int d = (a->ourVerseMax>a->ourVerse?a->ourVerseMax:a->ourVerse)-(a->refVerseMax>a->refVerse?a->refVerseMax:a->refVerse);
 			if (*verse < *verse_end)
 				*verse_end += d;
 			else
 				*verse_end = (*verse) + d;
 			*verse += d;
-			if (*a > dstSys->p->books.size()) {
-				//dbg_mapping SWLOGD("appropriate: %i %i %i %i %i %i %i %i\n",a[0],a[1],a[2],a[3],a[4],a[5],a[6],a[7]);
-				//dbg_mapping SWLOGD("book: %s\n", dstSys->getBook(a[7]-1)->getOSISName());
-				*book = dstSys->getBook(a[7]-1)->getOSISName();
-			}
+			if (a->refBookNum) *book = dstSys->p->bookOSISName(a->ourBookNum);
 			return;
 		}
-		//dbg_mapping SWLOGD("There is no mapping.\n");
 	}
 	else if (strcmp(dstSys->getName(),"KJVA") && strcmp(dstSys->getName(),"KJV")) {
 		const System *kjva = getSystemVersificationMgr()->getVersificationSystem("KJVA");
@@ -770,34 +880,32 @@ void VersificationMgr::System::translateVerse(const System *dstSys, const char *
 	else {
 		//dbg_mapping SWLOGD("Perform forward mapping.\n");
 		const int b = getBookNumberByOSISName(*book)-1;
-		if (b >= (int)p->mappings.size())
+		if (b >= (int)p->rulesByBook.size())
 			return;
 		// forward mapping should use reversed search for item
-		for (int i = (int)p->mappings[b].size()-1; i>=0; --i) {
-			const unsigned char *m = p->mappings[b][i];
-			if (m[1] < *chapter) {
+		for (int i = (int)p->rulesByBook[b].size()-1; i>=0; --i) {
+			const Private::MappingRule &m = p->mappingRules[p->rulesByBook[b][i]];
+			if (m.ourChapter < *chapter) {
 				SWLog::getSystemLog()->logWarning("There is no mapping for this chapter.\n");
 				return;
 			}
-			if (m[1] == *chapter && m[2] <= *verse) {
-				//dbg_mapping SWLOGD("found mapping %i %i %i %i %i %i\n",m[1],m[2],m[3],m[4],m[5],m[6]);
-				if (m[2] == *verse || (m[3] >= *verse && m[2] <= *verse)) {
-					*chapter = m[4];
-					*verse = m[5];
-					*verse_end = m[6];
+			if (m.ourChapter == *chapter && m.ourVerse <= *verse) {
+				if (m.ourVerse == *verse || (m.ourVerseMax >= *verse && m.ourVerse <= *verse)) {
+					*chapter = m.refChapter;
+					*verse = m.refVerse;
+					*verse_end = m.refVerseMax;
 				}
 				else {
-					*chapter = m[4];
+					*chapter = m.refChapter;
 					// shift verse
-					const int d = (m[6]>m[5]?m[6]:m[5])-(m[3]>m[2]?m[3]:m[2]);
+					const int d = (m.refVerseMax>m.refVerse?m.refVerseMax:m.refVerse)-(m.ourVerseMax>m.ourVerse?m.ourVerseMax:m.ourVerse);
 					if (*verse < *verse_end)
 						*verse_end += d;
 					else
 						*verse_end = (*verse) + d;
 					*verse += d;
 				}
-				if (*m > p->books.size())
-					*book = p->mappingsExtraBooks[m[0]-p->books.size()-1];
+				if (m.refBookNum) *book = p->bookOSISName(m.refBookNum);
 				return;
 			}
 		}

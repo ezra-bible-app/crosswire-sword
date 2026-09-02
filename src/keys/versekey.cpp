@@ -401,7 +401,8 @@ int VerseKey::getBookFromAbbrev(const char *iabbr) const
 
 	int abbrevsCnt;
 
-	const struct abbrev *abbrevs = getPrivateLocale()->getBookAbbrevs(&abbrevsCnt);
+	// builtin English + this system's own additions + the locale's entries
+	const struct abbrev *abbrevs = refSys->getBookAbbrevs(getPrivateLocale(), &abbrevsCnt);
 
 	StringMgr* stringMgr = StringMgr::getSystemStringMgr();
 	const bool hasUTF8Support = StringMgr::hasUTF8Support();
@@ -426,14 +427,6 @@ int VerseKey::getBookFromAbbrev(const char *iabbr) const
 		}
 
 		abLen = (int)strlen(abbr);
-
-		// a system with its own abbreviations serves them instead of the
-		// locale's table (a definition loaded from XML)
-		if (abLen && refSys && refSys->hasOwnAbbrevs()) {
-			retVal = refSys->getBookNumberByAbbrev(abbr);
-			if (retVal > 0) break;
-			continue;
-		}
 
 		if (abLen) {
 			min = 0;

@@ -264,11 +264,13 @@ int vm_nrsv[] = {
   27, 21
 };
 
-unsigned char mappings_nrsv[] = {
-    0,
-    66,  12,  18,  19,  13,  1,   0,
-    66,  13,  1,   1,   13,  1,   0,
-    0
+// our book chapter:verse[..verseMax] == the reference system's book chapter:verse[..verseMax]
+// (verseMax 0 = single verse; reference book 0 = same book as ours)
+VersificationMgr::System::MappingRule mappings_nrsv[] = {
+//   ourBook    ch,   v,vMax    refBook    ch,   v,vMax
+  { "Rev",       12,  18,  19,    0,           13,   1,   0 },
+  { "Rev",       13,   1,   1,    0,           13,   1,   0 },
+  { 0,             0,   0,   0,    0,             0,   0,   0 }
 };
 
 SWORD_NAMESPACE_END

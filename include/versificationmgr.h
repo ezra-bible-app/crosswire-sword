@@ -37,6 +37,7 @@ typedef std::list <SWBuf>StringList;
 
 struct sbook;
 class TreeKey;
+class SWLocale;
 
 
 struct abbrev {
@@ -123,12 +124,17 @@ public:
 
 	class SWDLLEXPORT System {
 	private:
+		// registration (VersificationMgr's register methods) builds a
+		// System through its Private half; a registered System is
+		// read-only to everyone else
+		friend class VersificationMgr;
 		class Private;
 		Private *p;
 		SWBuf name;
 		int BMAX[2];
 		long ntStartOffset;
 		void init();
+		void loadFromSBook(const sbook *ot, const sbook *nt, int *chMax);
 	public:
 		System() { this->name = ""; init(); }
 		System(const System &other);
@@ -140,20 +146,62 @@ public:
 		int getBookNumberByOSISName(const char *bookName) const;
 		const Book *getBook(int number) const;
 		int getBookCount() const;
-		void loadFromSBook(const sbook *ot, const sbook *nt, int *chMax, const unsigned char *mappings=NULL);
 		long getOffsetFromVerse(int book, int chapter, int verse) const;
 		char getVerseFromOffset(long offset, int *book, int *chapter, int *verse) const;
 		const int *getBMAX() const { return BMAX; };
 		long getNTStartOffset() const { return ntStartOffset; }
 		void translateVerse(const System *dstSys, const char **book, int *chapter, int *verse, int *verse_end) const;
 
-		/** a system loaded from XML may carry its own book abbreviations,
-		 * which then serve instead of the locale's table (see
-		 * VerseKey::getBookFromAbbrev) */
-		bool hasOwnAbbrevs() const;
-		void addOwnAbbrev(const char *abbrev, const char *osis);
-		/** upperAbbrev is already uppercased; returns book number or -1 */
-		int getBookNumberByAbbrev(const char *upperAbbrev) const;
+		/** What this system represents: "Bible" (the default).
+		 * Selects the builtin abbreviation table that seeds
+		 * getBookAbbrevs -- canon_abbrevs.h for Bible; nothing, today, for
+		 * anything else.  A v11n XML definition sets it with the refSys
+		 * attribute on its v11n element */
+		const char *getRefSys() const;
+
+		/** The book abbreviation table for parsing references in this
+		 * system under a locale; precedence, low to high:
+		 * the builtin table for the refSys, then
+		 * the system's own additions, then
+		 * the locale's [Book Abbrevs],
+		 * each layer overriding the one before; sorted, and cached per
+		 * locale.  Same table shape as canon_abbrevs.h: first match of the
+		 * entire key wins, so "JO=JOHN" beats "JOB" */
+		const struct abbrev *getBookAbbrevs(SWLocale *locale, int *retSize) const;
+
+		/** The system's own additions to the refSys's builtin table --
+		 * NOT the full abbreviation table (getBookAbbrevs is): entries
+		 * the builtin table lacks (books it doesn't know, or an
+		 * abbreviation meaning something else here).  A system loaded
+		 * from XML gets each book's name, osisID and preferred
+		 * abbreviation, plus its <abbr> elements, minus anything the
+		 * builtin table already says.  Stored uppercased.
+		 * i: 0 .. getAddedBookAbbrevCount()-1, insertion order; the
+		 * returned pointers stay valid for the life of the System */
+		int getAddedBookAbbrevCount() const;
+		void getAddedBookAbbrev(int i, const char **abbrev, const char **osisID) const;
+
+		/** One verse mapping rule: a verse (or verse range, verse..verseMax)
+		 * of this system and the verse or range of the reference
+		 * (intermediate) system it corresponds to, as canon_*.h data is
+		 * written.  Books are osisIDs; a refBook this system lacks is a
+		 * mapping extra book (see getMappingExtraBook); refBook NULL =
+		 * same book as ours.  The bookNum fields are filled in by the
+		 * engine at registration (leave 0 in hand-written data): 1-based
+		 * book numbers, numbers past getBookCount() being mapping extra
+		 * books; refBookNum 0 = same book as ours.
+		 * See doc/bible-intermediate-v11n.md */
+		struct MappingRule {
+			const char *ourBook; int ourChapter, ourVerse, ourVerseMax;	// verseMax 0 = single verse
+			const char *refBook; int refChapter, refVerse, refVerseMax;
+			int ourBookNum, refBookNum;
+		};
+		int getMappingRuleCount() const;
+		/** NULL if i is out of range; the rule and its book pointers stay
+		 * valid for the life of the System */
+		const MappingRule *getMappingRule(int i) const;
+		int getMappingExtraBookCount() const;
+		const char *getMappingExtraBook(int i) const;
 	};
 
 	VersificationMgr() { init(); }
@@ -162,7 +210,9 @@ public:
 	static void setSystemVersificationMgr(VersificationMgr *newVersificationMgr);
 	const StringList getVersificationSystems() const;
 	const System *getVersificationSystem(const char *name) const;
-	void registerVersificationSystem(const char *name, const sbook *ot, const sbook *nt, int *chMax, const unsigned char *mappings=NULL);
+	/** rules, when supplied, are this system's av11n mappings; the array
+	 * ends with a rule whose ourBook is NULL */
+	void registerVersificationSystem(const char *name, const sbook *ot, const sbook *nt, int *chMax, const System::MappingRule *rules = NULL);
 
 	/** Registers a versification system from an XML definition -- the
 	 * format the VMR serves (v11n/collection/book/chapter, abbreviations,
