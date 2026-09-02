@@ -174,7 +174,10 @@ char SWDLLEXPORT org_crosswire_sword_SWModule_hasKeyChildren
 
 // This method returns child nodes for a genbook,
 // but has special handling if called on a VerseKey module:
-//  [0..7] [testament, book, chapter, verse, chapterMax, verseMax, bookName, osisRef]
+//  [0..11] [testament, book, chapter, verse, chapterMax, verseMax, bookName, osisRef,
+//           shortText, bookAbbrev, osisBookName, collectionName]
+//  collectionName: the named collection the book belongs to in its
+//  versification ("Appendix"), "" for an ordinary OT or NT book
 const char ** SWDLLEXPORT org_crosswire_sword_SWModule_getKeyChildren
 	(SWHANDLE hSWModule);
 

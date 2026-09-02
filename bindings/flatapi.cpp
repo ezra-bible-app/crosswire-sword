@@ -30,6 +30,7 @@
 #include <installmgr.h>
 #include <remotetrans.h>
 #include <versekey.h>
+#include <versificationmgr.h>
 #include <treekeyidx.h>
 #include <filemgr.h>
 #include <stringmgr.h>
@@ -745,7 +746,7 @@ const char ** SWDLLEXPORT org_crosswire_sword_SWModule_getKeyChildren
 
 	sword::VerseKey *vkey = SWDYNAMIC_CAST(VerseKey, key);
 	if (vkey) {
-		retVal = (const char **)calloc(12, sizeof(const char *));
+		retVal = (const char **)calloc(13, sizeof(const char *));
 		SWBuf num;
 		num.appendFormatted("%d", vkey->getTestament());
 		stdstr((char **)&(retVal[0]), num.c_str());
@@ -769,6 +770,10 @@ const char ** SWDLLEXPORT org_crosswire_sword_SWModule_getKeyChildren
 		stdstr((char **)&(retVal[8]), vkey->getShortText());
 		stdstr((char **)&(retVal[9]), vkey->getBookAbbrev());
 		stdstr((char **)&(retVal[10]), vkey->getOSISBookName());
+		// the named collection the book belongs to ("Appendix"), if any
+		const VersificationMgr::System *vsys = VersificationMgr::getSystemVersificationMgr()->getVersificationSystem(vkey->getVersificationSystem());
+		int bookNum = vsys ? vsys->getBookNumberByOSISName(vkey->getOSISBookName()) : -1;
+		stdstr((char **)&(retVal[11]), (bookNum > 0) ? vsys->getBook(bookNum-1)->getCollectionName() : "");
 	}
 	else {
 		TreeKeyIdx *tkey = SWDYNAMIC_CAST(TreeKeyIdx, key);

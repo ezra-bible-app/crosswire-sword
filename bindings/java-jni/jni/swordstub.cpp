@@ -36,6 +36,7 @@
 #include <filemgr.h>
 #include <swmodule.h>
 #include <versekey.h>
+#include <versificationmgr.h>
 #include <localemgr.h>
 #include <stringmgr.h>
 #include <treekeyidx.h>
@@ -1665,7 +1666,7 @@ JNIEXPORT jobjectArray JNICALL Java_org_crosswire_android_sword_SWModule_getKeyC
 
 		sword::VerseKey *vkey = SWDYNAMIC_CAST(VerseKey, key);
 		if (vkey) {
-			ret = (jobjectArray) env->NewObjectArray(11, clazzString, nullptr);
+			ret = (jobjectArray) env->NewObjectArray(12, clazzString, nullptr);
 			SWBuf num;
 			num.appendFormatted("%d", vkey->getTestament());
 			env->SetObjectArrayElement(ret, 0, strToUTF8Java(env, num));
@@ -1689,6 +1690,10 @@ JNIEXPORT jobjectArray JNICALL Java_org_crosswire_android_sword_SWModule_getKeyC
 			env->SetObjectArrayElement(ret, 8, strToUTF8Java(env, vkey->getShortText()));
 			env->SetObjectArrayElement(ret, 9, strToUTF8Java(env, vkey->getBookAbbrev()));
 			env->SetObjectArrayElement(ret, 10, strToUTF8Java(env, vkey->getOSISBookName()));
+			// the named collection the book belongs to ("Appendix"), if any
+			const VersificationMgr::System *vsys = VersificationMgr::getSystemVersificationMgr()->getVersificationSystem(vkey->getVersificationSystem());
+			int bookNum = vsys ? vsys->getBookNumberByOSISName(vkey->getOSISBookName()) : -1;
+			env->SetObjectArrayElement(ret, 11, strToUTF8Java(env, (bookNum > 0) ? vsys->getBook(bookNum-1)->getCollectionName() : ""));
 		}
 		else {
 			TreeKeyIdx *tkey = SWDYNAMIC_CAST(TreeKeyIdx, key);

@@ -828,6 +828,8 @@ Log.d(TAG, "SWModule_getRenderChapter");
 			retVal.put("osisRef",    keyChildren[SWModule.VERSEKEY_OSISREF]);
 			retVal.put("shortText",  keyChildren[SWModule.VERSEKEY_SHORTTEXT]);
 			retVal.put("bookAbbrev", keyChildren[SWModule.VERSEKEY_BOOKABBREV]);
+			retVal.put("osisBookName", keyChildren[SWModule.VERSEKEY_OSISBOOKNAME]);
+			retVal.put("collectionName", keyChildren.length > SWModule.VERSEKEY_COLLECTIONNAME ? keyChildren[SWModule.VERSEKEY_COLLECTIONNAME] : "");
 		}
 		return retVal;
 	}
