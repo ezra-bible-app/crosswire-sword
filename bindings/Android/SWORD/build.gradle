@@ -16,7 +16,9 @@ buildscript {
 
 allprojects {
     repositories {
+        // our OpenSSL/curl prefab packages: a local build first, then crosswire.org
         maven { url = uri("${rootDir}/../prefab-repo") }
+        maven { url = uri("https://crosswire.org/ftpmirror/pub/sword/dependencies/android/prefab") }
         google()
         jcenter()
     }

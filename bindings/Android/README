@@ -46,6 +46,12 @@ The build recipe (as of 2026-09-04, OpenSSL 3.5.8 LTS and curl 8.22.0):
   ./gradlew -PndkPath=$ANDROID_HOME/ndk/<version> -Prelease \
       :openssl:distZip :curl:distZip
 
-Copy the resulting build/repository trees (AAR + POM) into prefab-repo/
-here; SWORD/build.gradle lists that directory as a Maven repository and
-SWORD/app/build.gradle names the versions.
+The resulting build/repository trees (AAR + POM) are published, like the
+Apple dependencies, on crosswire.org:
+
+  https://crosswire.org/ftpmirror/pub/sword/dependencies/android/prefab/
+  (the ndkports patch and the source tarballs sit beside it)
+
+SWORD/build.gradle lists that URL as a Maven repository, after a local
+prefab-repo/ directory here for anyone rebuilding the ports themselves,
+and SWORD/app/build.gradle names the versions.
