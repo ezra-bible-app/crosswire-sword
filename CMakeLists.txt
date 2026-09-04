@@ -18,14 +18,34 @@ CMAKE_POLICY(SET CMP0010 NEW)
 PROJECT(libsword CXX C)
 SET(SWORD_VERSION 1.9.0)
 
-# repository revision suffix: git commit count when building from a git
-# checkout; svn revision when building from an svn checkout; omitted otherwise
+# repository revision suffix.  From a git checkout: the svn revision of the
+# newest commit that carries a git-svn-id, plus the number of commits since,
+# so the number keeps counting on from where the svn era left off (a bare
+# commit count would fall below the revisions our releases were stamped
+# with); from an svn checkout: svnversion; omitted otherwise.
 # (keep in step with configure.ac)
 find_package(Git QUIET)
 if(GIT_FOUND AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/.git")
-	execute_process(COMMAND ${GIT_EXECUTABLE} rev-list --count HEAD
+	execute_process(COMMAND ${GIT_EXECUTABLE} log -1 --format=%H --grep=git-svn-id
 		WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-		OUTPUT_VARIABLE SWORD_REV OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+		OUTPUT_VARIABLE SWORD_SVN_COMMIT OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+	if(SWORD_SVN_COMMIT)
+		execute_process(COMMAND ${GIT_EXECUTABLE} log -1 --format=%B ${SWORD_SVN_COMMIT}
+			WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+			OUTPUT_VARIABLE SWORD_SVN_MSG ERROR_QUIET)
+		string(REGEX MATCH "git-svn-id: [^@]*@([0-9]+)" _svnid "${SWORD_SVN_MSG}")
+		execute_process(COMMAND ${GIT_EXECUTABLE} rev-list --count ${SWORD_SVN_COMMIT}..HEAD
+			WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+			OUTPUT_VARIABLE SWORD_SINCE_SVN OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+		if(CMAKE_MATCH_1 AND SWORD_SINCE_SVN)
+			math(EXPR SWORD_REV "${CMAKE_MATCH_1} + ${SWORD_SINCE_SVN}")
+		endif()
+	endif()
+	if(NOT SWORD_REV)
+		execute_process(COMMAND ${GIT_EXECUTABLE} rev-list --count HEAD
+			WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+			OUTPUT_VARIABLE SWORD_REV OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+	endif()
 endif()
 if(NOT SWORD_REV)
 	include(FindSubversion)

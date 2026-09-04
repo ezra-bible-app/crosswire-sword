@@ -6,9 +6,13 @@
 # Change it immediately after a release
 
 define([swordbase], [1.9.0])dnl
-dnl repository revision suffix: git commit count when building from a git
-dnl checkout; svn revision when building from an svn checkout; omitted otherwise
-define([swordrev], esyscmd([sh -c "(git rev-list --count HEAD 2>/dev/null || svnversion -n 2>/dev/null | cut -d: -f1) | tr -cd 0-9"]))dnl
+dnl repository revision suffix.  From a git checkout: the svn revision of the
+dnl newest commit that carries a git-svn-id, plus the number of commits since,
+dnl so the number keeps counting on from where the svn era left off (a bare
+dnl commit count would fall below the revisions our releases were stamped
+dnl with); from an svn checkout: svnversion; omitted otherwise.  Keep in step
+dnl with CMakeLists.txt.
+define([swordrev], esyscmd([sh -c "if git rev-parse --git-dir >/dev/null 2>&1; then c=\$(git log -1 --format=%H --grep=git-svn-id 2>/dev/null); if test -n \"\$c\"; then r=\$(git log -1 --format=%B \$c | grep git-svn-id | cut -d@ -f2 | cut -d' ' -f1); n=\$(git rev-list --count \$c..HEAD); echo \$((r + n)); else git rev-list --count HEAD; fi; else svnversion -n 2>/dev/null | cut -d: -f1; fi | tr -cd 0-9"]))dnl
 define([swordver], swordbase[]ifelse(swordrev, [], [], [.]swordrev))dnl
 AC_INIT(sword, swordver, sword-bugs@crosswire.org, sword, http://crosswire.org/sword)
 AC_CONFIG_SRCDIR(sword.bmp)
