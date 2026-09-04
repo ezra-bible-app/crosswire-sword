@@ -172,6 +172,7 @@ void InstallMgr::readInstallConf() {
 	long t = atol((*installConf)["General"]["TimeoutMillis"].c_str());
 	if (t > 0) setTimeoutMillis(t);
 	setUnverifiedPeerAllowed(stricmp((*installConf)["General"]["UnverifiedPeerAllowed"].c_str(), "false") != 0);
+	setCAInfo((*installConf)["General"]["CAInfo"].c_str());
 
 	SectionMap::iterator confSection = installConf->getSections().find("Sources");
 	ConfigEntMap::iterator sourceBegin;
@@ -284,6 +285,7 @@ void InstallMgr::saveInstallConf() {
 	}
 	(*installConf)["General"]["PassiveFTP"] = (isFTPPassive()) ? "true" : "false";
 	(*installConf)["General"]["UnverifiedPeerAllowed"] = (isUnverifiedPeerAllowed()) ? "true" : "false";
+	if (caInfo.length()) (*installConf)["General"]["CAInfo"] = caInfo;
 
 	installConf->save();
 }
@@ -403,6 +405,7 @@ SWLOGD("remoteCopy: %s, %s, %s, %c, %s", (is?is->source.c_str():"null"), src, (d
 	}
 
 	trans->setUnverifiedPeerAllowed(unverifiedPeerAllowed);
+	trans->setCAInfo(caInfo.c_str());
 
 	SWBuf urlPrefix;
 	if (is->type == "HTTP") {

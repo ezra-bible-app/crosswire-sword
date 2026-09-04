@@ -356,6 +356,17 @@ SWLOGI("initInstall: file doesn't exist: %s", confPath.c_str());
 		}
 		installMgr = new InstallMgr(baseDir, installStatusReporter);
 		if (disclaimerConfirmed) installMgr->setUserDisclaimerConfirmed(true);
+		// Android 14+ keeps the system CA store where curl cannot see it, so
+		// the app writes curl's Mozilla bundle to its files dir; with it we
+		// verify peers, without it we stay as permissive as before
+		SWBuf caFile = STORAGE_BASE;
+		caFile += "/cacert.pem";
+		if (FileMgr::existsFile(caFile.c_str())) {
+			installMgr->setCAInfo(caFile.c_str());
+			installMgr->setUnverifiedPeerAllowed(false);
+SWLOGI("initInstall: verifying TLS peers against %s", caFile.c_str());
+		}
+		else SWLOGI("initInstall: no %s; TLS peers unverified", caFile.c_str());
 SWLOGI("initInstall: instantiated InstallMgr with baseDir: %s", baseDir.c_str());
 	}
 	firstInstallInit = false;

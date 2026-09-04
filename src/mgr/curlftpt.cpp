@@ -162,6 +162,7 @@ char CURLFTPTransport::getURL(const char *destPath, const char *sourceURL, SWBuf
 
 		/* Switch on full protocol/debug output */
 		curl_easy_setopt(session, CURLOPT_VERBOSE, true);
+		if (*getCAInfo()) curl_easy_setopt(session, CURLOPT_CAINFO, getCAInfo());
 #ifndef OLDCURL
 		curl_easy_setopt(session, CURLOPT_CONNECTTIMEOUT_MS, timeoutMillis);
 #else

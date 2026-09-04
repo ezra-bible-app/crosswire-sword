@@ -95,6 +95,7 @@ protected:
 	long timeoutMillis;
 	SWBuf u, p;
 	bool unverifiedPeerAllowed;
+	SWBuf caInfo;
 	bool forgetInstallSource;
 
 	/** override this method and provide your own custom RemoteTransport subclass
@@ -331,6 +332,11 @@ public:
 	long getTimeoutMillis() { return timeoutMillis; }
 
 	void setUnverifiedPeerAllowed(bool allowed) { this->unverifiedPeerAllowed = allowed; }
+
+	/** a PEM bundle of CA certificates for the TLS transports ([General]
+	 * CAInfo in InstallMgr.conf); empty leaves curl's built-in default */
+	void setCAInfo(const char *caInfo) { this->caInfo = caInfo ? caInfo : ""; }
+	const char *getCAInfo() const { return caInfo.c_str(); }
 	void setForgetInstallSource(bool forget) { this->forgetInstallSource = forget; }
 	bool isUnverifiedPeerAllowed() { return unverifiedPeerAllowed; }
 	bool isForgetInstallSource() { return forgetInstallSource; }

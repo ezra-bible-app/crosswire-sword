@@ -61,6 +61,7 @@ protected:
 	long timeoutMillis;
 	bool term;
 	bool unverifiedPeerAllowed;
+	SWBuf caInfo;
 	SWBuf host;
 	SWBuf u;
 	SWBuf p;
@@ -104,6 +105,11 @@ public:
 	void setPasswd(const char *passwd) { p = passwd; }
 	void setUnverifiedPeerAllowed(bool val) { this->unverifiedPeerAllowed = val; }
 	bool isUnverifiedPeerAllowed() { return unverifiedPeerAllowed; }
+
+	/** a PEM bundle of CA certificates to verify peers against (curl's
+	 * CURLOPT_CAINFO); empty leaves the transport's built-in default */
+	void setCAInfo(const char *caInfo) { this->caInfo = caInfo ? caInfo : ""; }
+	const char *getCAInfo() const { return caInfo.c_str(); }
 	void terminate() { term = true; }
 };
 
