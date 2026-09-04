@@ -5,7 +5,7 @@ android {
 
     defaultConfig {
         applicationId "org.crosswire.android.sword"
-        minSdk 19
+        minSdk 21
         targetSdk 33
         versionCode 1
         versionName "1.0"
@@ -37,7 +37,7 @@ android {
         }
     }
     flavorDimensions 'Fast'
-    ndkVersion '25.2.9519653'
+    ndkVersion '29.0.14206865'
     namespace 'org.crosswire.android.sword'
     buildFeatures.prefab = true
 }
@@ -45,8 +45,10 @@ android {
 
 dependencies {
     implementation fileTree(dir: 'libs', include: ['*.jar'])
-    implementation 'com.android.ndk.thirdparty:openssl:1.1.1q-beta-1'
-    implementation 'com.android.ndk.thirdparty:curl:7.85.0-beta-1'
+    // OpenSSL and curl are our own prefab builds (16 KB page-aligned, NDK 29);
+    // see ../../prefab-repo and the ndkports notes in ../../README
+    implementation 'org.crosswire.ndkports:openssl:3.5.8'
+    implementation 'org.crosswire.ndkports:curl:8.22.0'
     implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
     implementation 'androidx.appcompat:appcompat:1.6.1'
     testImplementation 'junit:junit:4.13'

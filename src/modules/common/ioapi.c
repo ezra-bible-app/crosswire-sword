@@ -17,8 +17,14 @@
 #if defined(__APPLE__) || defined(IOAPI_NO_64)
 // In darwin and perhaps other BSD variants off_t is a 64 bit value, hence no need for specific 64 bit functions
 #define FOPEN_FUNC(filename, mode) fopen(filename, mode)
+#if defined(__ANDROID__) && __ANDROID_API__ < 24
+// bionic only declares ftello/fseeko from API 24; newer clang refuses implicit declarations
+#define FTELLO_FUNC(stream) ftell(stream)
+#define FSEEKO_FUNC(stream, offset, origin) fseek(stream, offset, origin)
+#else
 #define FTELLO_FUNC(stream) ftello(stream)
 #define FSEEKO_FUNC(stream, offset, origin) fseeko(stream, offset, origin)
+#endif
 #else
 #define FOPEN_FUNC(filename, mode) fopen64(filename, mode)
 #define FTELLO_FUNC(stream) ftello64(stream)

@@ -23,3 +23,29 @@ Android java bindings can be used after step 2
 cordova javascript bindings can be used after step 3
 
 Hope this helps get you started.  Let me know your progress!
+
+OpenSSL and curl
+----------------
+libsword links libcurl, which links OpenSSL.  Both used to come from
+Google's com.android.ndk.thirdparty prefab packages, but Google stopped
+publishing those in 2022 (curl 7.85, OpenSSL 1.1.1q: end-of-life and
+4 KB page-aligned only).  We now build them ourselves with Google's
+ndkports tooling and the same NDK the bindings use, so every .so in the
+plugin is 16 KB page-aligned (required for Android 15+ devices).
+
+The build recipe (as of 2026-09-04, OpenSSL 3.5.8 LTS and curl 8.22.0):
+
+  git clone https://android.googlesource.com/platform/tools/ndkports
+  # drop the release tarballs in as openssl/src.tar.gz and curl/src.tar.gz,
+  # set portVersion in each build.gradle.kts, group org.crosswire.ndkports,
+  # add -Wl,-z,max-page-size=16384 (OpenSSL Configure arg, curl LDFLAGS),
+  # OpenSSL 3 wants ANDROID_NDK_ROOT; curl 8 wants --with-openssl and
+  # --without-libpsl.  Gradle 7.5 there needs JDK 11; OpenSSL's Configure
+  # needs the perl FindBin, IPC::Cmd and Time::Piece modules (dnf: perl-FindBin
+  # perl-IPC-Cmd perl-Time-Piece).
+  ./gradlew -PndkPath=$ANDROID_HOME/ndk/<version> -Prelease \
+      :openssl:distZip :curl:distZip
+
+Copy the resulting build/repository trees (AAR + POM) into prefab-repo/
+here; SWORD/build.gradle lists that directory as a Maven repository and
+SWORD/app/build.gradle names the versions.
