@@ -26,7 +26,7 @@ SET(SWORD_VERSION 1.9.0)
 # (keep in step with configure.ac)
 find_package(Git QUIET)
 if(GIT_FOUND AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/.git")
-	execute_process(COMMAND ${GIT_EXECUTABLE} log -1 --format=%H --grep=git-svn-id
+	execute_process(COMMAND ${GIT_EXECUTABLE} log -1 --format=%H --grep=^git-svn-id:
 		WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 		OUTPUT_VARIABLE SWORD_SVN_COMMIT OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
 	if(SWORD_SVN_COMMIT)
