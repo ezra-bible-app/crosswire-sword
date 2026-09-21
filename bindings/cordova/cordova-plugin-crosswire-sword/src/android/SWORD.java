@@ -373,8 +373,7 @@ public class SWORD extends CordovaPlugin {
 		else if (action.equals("SWModule_setKeyText")) {
 			SWModule mod = mgr.getModuleByName(args.getString(0));
 			if (mod == null) { callbackContext.error("couldn't find module: " + args.getString(0)); return true; }
-			mod.setKeyText(args.getString(1));
-			callbackContext.success();
+			callbackContext.success((int)mod.setKeyText(args.getString(1)));
 		}
 		else if (action.equals("SWModule_getKeyText")) {
 			SWModule mod = mgr.getModuleByName(args.getString(0));

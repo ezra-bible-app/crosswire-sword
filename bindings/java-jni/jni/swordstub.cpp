@@ -1308,15 +1308,22 @@ JNIEXPORT void JNICALL Java_org_crosswire_android_sword_SWModule_nativeDispose
 /*
  * Class:     org_crosswire_android_sword_SWModule
  * Method:    setKeyText
- * Signature: (Ljava/lang/String;)V
+ * Signature: (Ljava/lang/String;)C
+ *
+ * Returns the key's error for this positioning, as SWModule::setKeyText does
+ * (0, or e.g. KEYERR_OUTOFBOUNDS when the text names nothing in the module's
+ * versification and the key has gone to its bound).  The error stays set, so
+ * error() afterwards answers the same; the caller need not make that second,
+ * separately scheduled call to learn it.
  */
-JNIEXPORT void JNICALL Java_org_crosswire_android_sword_SWModule_setKeyText
+JNIEXPORT jchar JNICALL Java_org_crosswire_android_sword_SWModule_setKeyText
 		(JNIEnv *env, jobject me, jstring keyTextJS) {
 
 	init(env);
 
 	SWModule *module = getModule(env, me);
 
+	int error = -99;
 	if (module) {
 		const char *keyText = env->GetStringUTFChars(keyTextJS, nullptr);
 //SWLOGD("setKeyText(%s, %s)", module->getName(), keyText);
@@ -1326,20 +1333,23 @@ JNIEXPORT void JNICALL Java_org_crosswire_android_sword_SWModule_setKeyText
 			if (!stricmp(keyText+1, "book")) {
 				int newBook = vkey->getBook() + ((*keyText=='+')?1:-1);
 //SWLOGD("setting book to %d", newBook);
+				vkey->popError();	// an error left from before is not this move's
 				vkey->setBook((signed char)newBook);
 				env->ReleaseStringUTFChars(keyTextJS, keyText);
-				return;
+				return vkey->getError();
 			}
 			else if (!stricmp(keyText+1, "chapter")) {
+				vkey->popError();
 				vkey->setChapter(vkey->getChapter() + ((*keyText=='+')?1:-1));
 				env->ReleaseStringUTFChars(keyTextJS, keyText);
-				return;
+				return vkey->getError();
 			}
 		}
 
-		module->setKey(keyText);
+		error = module->setKey(keyText);
 		env->ReleaseStringUTFChars(keyTextJS, keyText);
 	}
+	return error;
 }
 
 

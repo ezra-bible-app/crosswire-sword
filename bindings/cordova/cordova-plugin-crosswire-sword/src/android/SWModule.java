@@ -76,7 +76,8 @@ public class SWModule {
 
 	// Special values handled for VerseKey modules: [+-][book|chapter]
 	//	(e.g.	"+chapter" will increment the VerseKey 1 chapter)
-	public native void          setKeyText(String key);
+	// returns the key's error for this positioning (0 for none), which error() also still answers
+	public native char          setKeyText(String key);
 
 	public native String        getKeyText();
 	public native boolean       hasKeyChildren();

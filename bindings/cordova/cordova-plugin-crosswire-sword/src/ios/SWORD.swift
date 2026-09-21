@@ -951,8 +951,8 @@ debugPrint("initMgr, mgr: " + String(describing: mgr))
         let module = getModule(command: command)
         let keyText = command.arguments[1] as? String ?? ""
         if (module != 0) {
-            org_crosswire_sword_SWModule_setKeyText(module, keyText)
-            self.commandDelegate!.send(CDVPluginResult(status: CDVCommandStatus_OK, messageAs: "SWModule_setKeyText"), callbackId: command.callbackId)
+            let error = Int(org_crosswire_sword_SWModule_setKeyText(module, keyText))
+            self.commandDelegate!.send(CDVPluginResult(status: CDVCommandStatus_OK, messageAs: error), callbackId: command.callbackId)
         }
     }
 

@@ -655,40 +655,47 @@ const char ** SWDLLEXPORT org_crosswire_sword_SWModule_parseKeyList
 /*
  * Class:     org_crosswire_sword_SWModule
  * Method:    setKeyText
- * Signature: (Ljava/lang/String;)V
+ * Signature: (Ljava/lang/String;)C
  */
 // Special values handled for VerseKey modules:
 //	[+-][book|chapter]	- [de|in]crement by chapter or book
 //	(e.g.	"+chapter" will increment the VerseKey 1 chapter)
 //	[=][key]		- position absolutely and don't normalize
 //	(e.g.	"jn.1.0" for John Chapter 1 intro; "jn.0.0" For Book of John Intro)
-void SWDLLEXPORT org_crosswire_sword_SWModule_setKeyText
+// Returns the key's error for this positioning, as SWModule::setKeyText does
+// (0, or e.g. KEYERR_OUTOFBOUNDS when the text names nothing in the module's
+// versification and the key has gone to its bound); the error stays set, so
+// a popError afterwards answers the same.  -1 for a bad handle.
+char SWDLLEXPORT org_crosswire_sword_SWModule_setKeyText
   (SWHANDLE hSWModule, const char *keyText) {
 
-	GETSWMODULE(hSWModule, );
+	GETSWMODULE(hSWModule, -1);
 
 	sword::SWKey *key = module->getKey();
 	sword::VerseKey *vkey = SWDYNAMIC_CAST(VerseKey, key);
 	if (vkey) {
 		if ((*keyText=='+' || *keyText=='-')) {
 			if (!sword::stricmp(keyText+1, "book")) {
+				vkey->popError();	// an error left from before is not this move's
 				vkey->setBook(vkey->getBook() + ((*keyText=='+')?1:-1));
-				return;
+				return vkey->getError();
 			}
 			else if (!sword::stricmp(keyText+1, "chapter")) {
+				vkey->popError();
 				vkey->setChapter(vkey->getChapter() + ((*keyText=='+')?1:-1));
-				return;
+				return vkey->getError();
 			}
 		}
 		else if (*keyText=='=') {
+			vkey->popError();
 			vkey->setIntros(true);
 			vkey->setAutoNormalize(false);
 			vkey->setText(keyText+1);
-			return;
+			return vkey->getError();
 		}
 	}
 
-	module->setKey(keyText);
+	return module->setKey(keyText);
 }
 
 /*

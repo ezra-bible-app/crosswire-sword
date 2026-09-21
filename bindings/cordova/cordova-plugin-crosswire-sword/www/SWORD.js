@@ -112,6 +112,12 @@ SWModule.prototype.SEARCHFLAG_MATCHWHOLEENTRY  = 4096;	// entry-attribute search
 SWModule.prototype.SEARCHFLAG_STRICTBOUNDARIES = 8192;	// multiword/regex: no hits across verse boundaries
 
 
+// callback(error): the key's error for this positioning, 0 for none, e.g.
+// KEYERR_OUTOFBOUNDS (1) when keyText names nothing in the module's
+// versification -- the key has then gone to its bound (asking a Hebrew Bible
+// for James leaves it at the first verse of its last book).  The answer comes
+// with the call itself; popError afterwards still returns it, but that is a
+// second call and others may be scheduled on the module between the two.
 SWModule.prototype.setKeyText = function(keyText, callback) {
 	var retVal = null;
 	exec(callback?callback:function(r) { retVal = r; },

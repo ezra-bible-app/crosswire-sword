@@ -92,9 +92,9 @@ JNIEXPORT jobjectArray JNICALL Java_org_crosswire_android_sword_SWModule_parseKe
 /*
  * Class:     org_crosswire_android_sword_SWModule
  * Method:    setKeyText
- * Signature: (Ljava/lang/String;)V
+ * Signature: (Ljava/lang/String;)C
  */
-JNIEXPORT void JNICALL Java_org_crosswire_android_sword_SWModule_setKeyText
+JNIEXPORT jchar JNICALL Java_org_crosswire_android_sword_SWModule_setKeyText
   (JNIEnv *, jobject, jstring);
 
 /*

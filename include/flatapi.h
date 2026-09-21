@@ -141,14 +141,16 @@ const char ** SWDLLEXPORT org_crosswire_sword_SWModule_parseKeyList
 /*
  * Class:     org_crosswire_sword_SWModule
  * Method:    setKeyText
- * Signature: (Ljava/lang/String;)V
+ * Signature: (Ljava/lang/String;)C
  */
 // Special values handled for VerseKey modules:
 //	[+-][book|chapter]	- [de|in]crement by chapter or book
 //	(e.g.	"+chapter" will increment the VerseKey 1 chapter)
 //	[=][key]		- position absolutely and don't normalize
 //	(e.g.	"jn.1.0" for John Chapter 1 intro; "jn.0.0" For Book of John Intro)
-void SWDLLEXPORT org_crosswire_sword_SWModule_setKeyText
+// Returns the key's error for this positioning (0 when there is none); it
+// stays set for a popError afterwards.  -1 for a bad handle.
+char SWDLLEXPORT org_crosswire_sword_SWModule_setKeyText
 	(SWHANDLE hSWModule, const char *key);
 
 /*
