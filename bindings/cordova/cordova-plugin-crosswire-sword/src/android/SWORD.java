@@ -94,11 +94,42 @@ public class SWORD extends CordovaPlugin {
 		}});
 	}
 
+	// who is asking, for the servers we talk to: "Bishop/1.7.905 (OnePlus
+	// CPH2581; Android 16) SWORD/1.10.0".  Goes on every request makeRequest
+	// makes, and is appended to the WebView's own User-Agent so the app's
+	// XHRs carry it too.
+	public static String userAgent = null;
+
+	static String buildUserAgent(Activity activity, String engineVersion) {
+		String app = "SWORDApp", ver = "";
+		try {
+			android.content.pm.PackageManager pm = activity.getPackageManager();
+			android.content.pm.PackageInfo pi = pm.getPackageInfo(activity.getPackageName(), 0);
+			app = String.valueOf(pm.getApplicationLabel(pi.applicationInfo)).replaceAll("[^A-Za-z0-9._-]", "");
+			ver = pi.versionName != null ? pi.versionName : "";
+		} catch (Exception e) {}
+		String model = android.os.Build.MODEL != null ? android.os.Build.MODEL : "";
+		String maker = android.os.Build.MANUFACTURER != null ? android.os.Build.MANUFACTURER : "";
+		if (maker.length() > 0) maker = maker.substring(0, 1).toUpperCase() + maker.substring(1);
+		String device = (model.toLowerCase().startsWith(maker.toLowerCase()) ? model : (maker + " " + model)).trim();
+		return app + "/" + ver + " (" + device + "; Android " + android.os.Build.VERSION.RELEASE + ") SWORD/" + engineVersion;
+	}
+
 	public void initialize(CordovaInterface cordova, CordovaWebView webView) {
 		super.initialize(cordova, webView);
 		launchUrl = deepLink(cordova.getActivity().getIntent());
 		mgr = new AndroidMgr(cordova.getActivity().getApplication());
 		installMgr = new InstallMgr();
+		userAgent = buildUserAgent(cordova.getActivity(), mgr.version());
+		final android.view.View view = webView.getView();
+		cordova.getActivity().runOnUiThread(new Runnable() {	// WebView settings live on the UI thread
+			public void run() {
+				try {
+					android.webkit.WebSettings ws = ((android.webkit.WebView) view).getSettings();
+					ws.setUserAgentString(ws.getUserAgentString() + " " + userAgent);
+				} catch (Exception e) { Log.d(TAG, "could not append to the WebView User-Agent: " + e); }
+			}
+		});
 		if (android.os.Build.VERSION.SDK_INT > 9) {
 			android.os.StrictMode.ThreadPolicy policy = new android.os.StrictMode.ThreadPolicy.Builder().permitAll().build();
 			android.os.StrictMode.setThreadPolicy(policy);
@@ -913,6 +944,7 @@ Log.d(TAG, "makeRequest(url: " + url + ", postData: " + postData + ", method: " 
 
 		Map<String, String> defaultHeaders = new HashMap<String, String>();
 		defaultHeaders.put("Accept", "*/*");
+		if (userAgent != null) defaultHeaders.put("User-Agent", userAgent);
 //		defaultHeaders.put("Content-Type", "application/xml");
 	 	defaultHeaders.put("Content-Type", "application/x-www-form-urlencoded");
 //Log.d(TAG, "about to add postData length to header");
