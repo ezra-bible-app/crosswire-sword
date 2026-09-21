@@ -56,6 +56,21 @@ commit like everything else in this repository.
   (svn-rev-like: orders and measures; only comparable between full
   clones).  Cross-repo port markers (crosswire-java) carry both that
   ordinal and the sha.
+- **A key text its versification cannot hold leaves the key at the first
+  verse of its LAST book, with KEYERR_OUTOFBOUNDS** (VerseKey::parse
+  presets last testament / last book / 1:1 before parsing, and a text
+  which names no book of the system parses to nothing).  Leningrad ends
+  ... Lam, Esth, Dan, Ezra, Neh, so asking the WLC for James gives
+  Neh.1.1; a system with the whole canon (the SBLGNT's) takes Gen.1.1
+  with no error and simply has no text there.  Keeping the old position
+  on error would be wrong for the ordinary bound (Troy, 2026-09-21: a
+  key 20 verses from the end incremented by 100 must go to the end AND
+  say out of bounds); the caller decides what an error means.  Hence the
+  bindings' setKeyText returns the error with the call (flatapi, JNI,
+  cordova; 2026-09-21) -- SWModule::setKeyText always did -- instead of
+  needing a second, separately scheduled popError.  Note popError after
+  a setKey answers the error TWICE: once from the module's copy, once
+  from the key's.
 
 ## Hard-won mapping lessons (2026-08-25)
 
