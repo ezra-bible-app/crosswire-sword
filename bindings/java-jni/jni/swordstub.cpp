@@ -383,8 +383,12 @@ void bibleSyncCallback(char cmd, string pkt_uuid, string bible, string ref, stri
 			case 'E':
 				// mismatch
 			case 'M':
-				// new speaker
+				break;
+				// new speaker: the library listens to the first speaker only;
+				// a study group wants every phone in the room heard
 			case 'S':
+				if (bibleSync) bibleSync->listenToSpeaker(true, pkt_uuid);
+				break;
 				// dead speaker
 			case 'D':
 				// announce

@@ -199,8 +199,6 @@ add_library( # Sets the name of the library.
         frontend/swlog.cpp
 
         biblesync/biblesync.cc
-        biblesync/Android/ifaddrs.c
-        biblesync/Android/uuid.c
 
         )
 
@@ -212,7 +210,6 @@ include_directories(
         ../../../../../../../include
 
         ../../../../../../../../biblesync/include
-        ../../../../../../../../biblesync/src/Android/
 
 )
 

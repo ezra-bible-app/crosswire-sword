@@ -47,9 +47,13 @@ import org.crosswire.android.sword.InstallMgr;
 import android.provider.Settings;
 import android.util.Log;
 import android.content.Intent;
+import android.content.Context;
+import android.net.wifi.WifiManager;
 import android.app.Activity;
 
 public class SWORD extends CordovaPlugin {
+	// held while BibleSync runs: without it most Wi-Fi drivers filter out the multicast group
+	private WifiManager.MulticastLock multicastLock = null;
 	public static final String TAG = "SWORD";
 	public static SWMgr mgr = null;
 	public static InstallMgr installMgr = null;
@@ -520,6 +524,12 @@ Log.d(TAG, "SWModule_getRenderChapter");
 			final String userName = args.getString(1);
 			final String passphrase = args.getString(2);
 
+			if (multicastLock == null) {
+				WifiManager wifi = (WifiManager) cordova.getActivity().getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+				if (wifi != null) { multicastLock = wifi.createMulticastLock("BibleSync"); multicastLock.setReferenceCounted(false); }
+			}
+			if (multicastLock != null) multicastLock.acquire();
+
 			cordova.getThreadPool().execute(new Runnable() {
 			    @Override
 			    public void run() {
@@ -557,6 +567,7 @@ Log.d(TAG, "SWModule_getRenderChapter");
 		}
 		else if (action.equals("SWMgr_stopBibleSync")) {
 			mgr.stopBibleSync();
+			if (multicastLock != null && multicastLock.isHeld()) multicastLock.release();
 			callbackContext.success();
 		}
 		else if (action.equals("SWMgr_setJavascript")) {
