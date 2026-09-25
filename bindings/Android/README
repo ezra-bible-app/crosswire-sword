@@ -22,6 +22,21 @@ The steps to build all of this are usually:
 Android java bindings can be used after step 2
 cordova javascript bindings can be used after step 3
 
+The native libs are not kept in git (they are build products, and every
+rebuild would add megabytes of binary history).  Anyone who only needs the
+cordova plugin, not a fresh NDK build, can fetch the published set instead
+of steps 2 and 3:
+
+	make fetch
+
+which downloads libsword-android.tar.gz from
+https://crosswire.org/ftpmirror/pub/sword/dependencies/android/ (one folder
+per sword commit, README and sha256 beside the tarball) into
+../cordova/cordova-plugin-crosswire-sword/libs/android/.  After an NDK
+rebuild, publish the new set the same way and point SWORDANDROID in the
+Makefile at it.  The iOS xcframeworks have the same arrangement in
+../objc/dependencies.
+
 Hope this helps get you started.  Let me know your progress!
 
 OpenSSL and curl

@@ -21,6 +21,8 @@
 # Release Notes
 
 ### 0.2.8 (Aug 22, 2026)
+* iOS: builds with cordova-ios 8 and Xcode 27 (xcframeworks for libsword and curl 8.22 with OpenSSL 3.5.8, verified against the iOS trust store)
+* The native binaries of both platforms are no longer in git: `make fetch` in bindings/Android and `make ios` in bindings/objc/dependencies download the published sets from crosswire.org
 * SWMgr.readFile/writeFile/listDir/removeFile/mkdir: plain file access through the engine's FileMgr, so paths in a shared (SAF) library work
 * SWMgr.getDataPath/getDataStorage/chooseDataStorage/clearDataStorage/describeTree: a separately granted study-data folder (e.g. on Google Drive) for bookmarks and the like
 * Android: writes to non-local document providers (Drive...) are staged and committed on close; such providers only accept content through a Java-side close

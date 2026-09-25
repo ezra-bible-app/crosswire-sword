@@ -2,6 +2,15 @@
   "name": "cordova-plugin-crosswire-sword",
   "version": "0.2.8",
   "description": "The SWORD Project Plugin",
+  "files": [
+    "plugin.xml",
+    "libs",
+    "src",
+    "www",
+    "README.md",
+    "RELEASENOTES.md",
+    "LICENSE"
+  ],
   "cordova": {
     "id": "cordova-plugin-crosswire-sword",
     "platforms": [

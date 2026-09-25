@@ -1,5 +1,5 @@
 bindings/Android/prefab-repo/
-bindings/cordova/cordova-plugin-crosswire-sword/libs/ios/
+bindings/cordova/cordova-plugin-crosswire-sword/libs/
 bindings/cordova/cordova-plugin-crosswire-sword/src/ios/defs.h
 bindings/cordova/cordova-plugin-crosswire-sword/src/ios/flatapi.h
 bindings/objc/dependencies/*.tar.gz
