@@ -130,14 +130,16 @@
 		</config-file>
 		<header-file src="src/ios/flatapi.h" />
 		<header-file src="src/ios/defs.h" />
-		<header-file src="src/ios/SWORD-Bridging-Header.h" />
+		<header-file src="src/ios/SWORD-Bridging-Header.h" type="BridgingHeader" />
 		<source-file src="src/ios/SWORD.swift" />
-		<source-file src="libs/ios/libSWORD.a" framework="true" />
-		<source-file src="libs/ios/libcurl.a" framework="true" />
-		<framework src="libstdc++.dylib" />
-		<framework src="libcurl.dylib" />
-
-		<dependency id="cordova-plugin-add-swift-support" />
+		<framework src="libs/ios/SWORD.xcframework" custom="true" embed="false" />
+		<framework src="libs/ios/curl.xcframework" custom="true" embed="false" />
+		<framework src="libc++.tbd" />
+		<framework src="libz.tbd" />
+		<framework src="libicucore.tbd" />
+		<framework src="Security.framework" />
+		<framework src="CoreFoundation.framework" />
+		<framework src="SystemConfiguration.framework" />
 
 <!--	<source-file src="lib/ios/libSWORD.a" framework="true" /> -->
 	</platform>

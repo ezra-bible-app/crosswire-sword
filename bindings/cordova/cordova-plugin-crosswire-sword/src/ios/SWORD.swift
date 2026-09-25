@@ -141,7 +141,7 @@ debugPrint("initMgr, mgr: " + String(describing: mgr))
                         ] as [String : Any]
                     if (mySWORDPlugin != nil && mySWORDPlugin!.callbackID != "") {
                         let result = CDVPluginResult(status: CDVCommandStatus_OK, messageAs: response)
-                        result?.setKeepCallbackAs(true)
+                        result.setKeepCallbackAs(true)
                         mySWORDPlugin!.commandDelegate!.send(result, callbackId: mySWORDPlugin!.callbackID)
                     }
                 }
@@ -154,7 +154,7 @@ debugPrint("initMgr, mgr: " + String(describing: mgr))
                         ] as [String : Any]
                     if (mySWORDPlugin != nil && mySWORDPlugin!.callbackID != "") {
                         let result = CDVPluginResult(status: CDVCommandStatus_OK, messageAs: response)
-                        result?.setKeepCallbackAs(true)
+                        result.setKeepCallbackAs(true)
                         mySWORDPlugin!.commandDelegate!.send(result, callbackId: mySWORDPlugin!.callbackID)
                     }
                 }
@@ -240,7 +240,7 @@ debugPrint("initMgr, mgr: " + String(describing: mgr))
         let confPath = baseDir + "/extraConfig.conf";
         let keyVal = org_crosswire_sword_SWConfig_getKeyValue(confPath, section, key)
         let retVal = keyVal == nil ? nil : String(cString:keyVal!)
-        self.commandDelegate!.send(CDVPluginResult(status: CDVCommandStatus_OK, messageAs: retVal), callbackId: command.callbackId)
+        self.commandDelegate!.send((retVal == nil ? CDVPluginResult(status: CDVCommandStatus_OK) : CDVPluginResult(status: CDVCommandStatus_OK, messageAs: retVal!)), callbackId: command.callbackId)
     }
     
     
@@ -290,7 +290,7 @@ debugPrint("initMgr, mgr: " + String(describing: mgr))
 
         let translated = org_crosswire_sword_SWMgr_translate(mgr, text, localeName == "null" || localeName == "" ? nil : localeName)
         let retVal = translated == nil ? nil : String(cString:translated!)
-        self.commandDelegate!.send(CDVPluginResult(status: CDVCommandStatus_OK, messageAs: retVal), callbackId: command.callbackId)
+        self.commandDelegate!.send((retVal == nil ? CDVPluginResult(status: CDVCommandStatus_OK) : CDVPluginResult(status: CDVCommandStatus_OK, messageAs: retVal!)), callbackId: command.callbackId)
     }
     
 
@@ -332,7 +332,7 @@ debugPrint("initMgr, mgr: " + String(describing: mgr))
 
         let prefixPath = org_crosswire_sword_SWMgr_getPrefixPath(mgr)
         let retVal = prefixPath == nil ? nil : String(cString:prefixPath!)
-        self.commandDelegate!.send(CDVPluginResult(status: CDVCommandStatus_OK, messageAs: retVal), callbackId: command.callbackId)
+        self.commandDelegate!.send((retVal == nil ? CDVPluginResult(status: CDVCommandStatus_OK) : CDVPluginResult(status: CDVCommandStatus_OK, messageAs: retVal!)), callbackId: command.callbackId)
     }
 
     // iOS keeps study data beside the module library (no separate grant).
@@ -445,13 +445,14 @@ debugPrint("initMgr, mgr: " + String(describing: mgr))
         }
         let session = URLSession.shared
         session.dataTask(with: request) {data, response, err in
-            let pluginResult = CDVPluginResult(status: CDVCommandStatus_OK, messageAs: String(data: data!, encoding: String.Encoding.utf8))
-            pluginResult?.setKeepCallbackAs(false)
+            let body = String(data: data!, encoding: String.Encoding.utf8)
+            let pluginResult = body == nil ? CDVPluginResult(status: CDVCommandStatus_OK) : CDVPluginResult(status: CDVCommandStatus_OK, messageAs: body!)
+            pluginResult.setKeepCallbackAs(false)
             self.commandDelegate!.send(pluginResult, callbackId: command.callbackId)
         }.resume()
 
         let pluginResult = CDVPluginResult(status: CDVCommandStatus_NO_RESULT)
-        pluginResult?.setKeepCallbackAs(true)
+        pluginResult.setKeepCallbackAs(true)
         self.commandDelegate!.send(pluginResult, callbackId: command.callbackId)
   }
     
@@ -581,7 +582,7 @@ debugPrint("initMgr, mgr: " + String(describing: mgr))
         if (mod != 0) {
             let val = org_crosswire_sword_SWModule_getConfigEntry(mod, command.arguments[1] as? String ?? "")
             let retVal = val == nil ? nil : String(cString: val!)
-            self.commandDelegate!.send(CDVPluginResult(status: CDVCommandStatus_OK, messageAs: retVal), callbackId: command.callbackId)
+            self.commandDelegate!.send((retVal == nil ? CDVPluginResult(status: CDVCommandStatus_OK) : CDVPluginResult(status: CDVCommandStatus_OK, messageAs: retVal!)), callbackId: command.callbackId)
         }
         else {
             self.commandDelegate!.send(CDVPluginResult(status: CDVCommandStatus_ERROR), callbackId: command.callbackId)
@@ -647,7 +648,7 @@ debugPrint("initMgr, mgr: " + String(describing: mgr))
             let keyText = String(cString: org_crosswire_sword_SWModule_getKeyText(mod))
             sendVerse(module: mod, keyText: keyText)
             let result = CDVPluginResult(status: CDVCommandStatus_NO_RESULT)
-            result?.setKeepCallbackAs(true)
+            result.setKeepCallbackAs(true)
             self.commandDelegate!.send(result, callbackId: command.callbackId)
         }
         else {
@@ -722,7 +723,7 @@ debugPrint("initMgr, mgr: " + String(describing: mgr))
 				retVal["cmd"]     = "nav";
 				retVal["osisRef"] = response1;
 				let result = CDVPluginResult(status: CDVCommandStatus_OK, messageAs: retVal)
-				result?.setKeepCallbackAs(true)
+				result.setKeepCallbackAs(true)
 				mySWORDPlugin!.commandDelegate!.send(result, callbackId: mySWORDPlugin!.bibleSyncCallbackID)
 			}
 			else if (cmd == CChar("C")	) {
@@ -731,7 +732,7 @@ debugPrint("initMgr, mgr: " + String(describing: mgr))
 				retVal["user"]    = response1;
 				retVal["message"] = response2;
 				let result = CDVPluginResult(status: CDVCommandStatus_OK, messageAs: retVal)
-				result?.setKeepCallbackAs(true)
+				result.setKeepCallbackAs(true)
 				mySWORDPlugin!.commandDelegate!.send(result, callbackId: mySWORDPlugin!.bibleSyncCallbackID)
 			}
                     }
@@ -740,12 +741,12 @@ debugPrint("initMgr, mgr: " + String(describing: mgr))
                 self.bibleSyncCallbackID = ""
                 
                 let result = CDVPluginResult(status: CDVCommandStatus_OK, messageAs: "SWMgr_startBibleSync finished")
-                result?.setKeepCallbackAs(false)
+                result.setKeepCallbackAs(false)
                 self.commandDelegate!.send(result, callbackId: command.callbackId)
             }
             
             let result = CDVPluginResult(status: CDVCommandStatus_OK, messageAs: "SWMgr_startBibleSync")
-            result?.setKeepCallbackAs(true)
+            result.setKeepCallbackAs(true)
             self.commandDelegate!.send(result, callbackId: command.callbackId)
     }
     
@@ -780,7 +781,7 @@ debugPrint("initMgr, mgr: " + String(describing: mgr))
 //        }
 /*
         var pluginResult = CDVPluginResult(status: CDVCommandStatus_OK, messageAs: "SWModule_getRenderChapter")
-        pluginResult?.setKeepCallbackAs(true)
+        pluginResult.setKeepCallbackAs(true)
         self.commandDelegate!.send(pluginResult, callbackId: command.callbackId)
 */
     }
@@ -870,7 +871,7 @@ debugPrint("initMgr, mgr: " + String(describing: mgr))
                         ] as [String : Any]
                     if (mySWORDPlugin != nil && mySWORDPlugin!.callbackID != "") {
                         let result = CDVPluginResult(status: CDVCommandStatus_OK, messageAs: response)
-                        result?.setKeepCallbackAs(true)
+                        result.setKeepCallbackAs(true)
                         mySWORDPlugin!.commandDelegate!.send(result, callbackId: mySWORDPlugin!.callbackID)
                     }
                 });
@@ -902,12 +903,12 @@ debugPrint("initMgr, mgr: " + String(describing: mgr))
                 response["results"] = results
                 
                 let result = CDVPluginResult(status: CDVCommandStatus_OK, messageAs: response)
-                result?.setKeepCallbackAs(false)
+                result.setKeepCallbackAs(false)
                 self.commandDelegate!.send(result, callbackId: command.callbackId)
             }
             
             let result = CDVPluginResult(status: CDVCommandStatus_OK, messageAs: "SWModule_search")
-            result?.setKeepCallbackAs(true)
+            result.setKeepCallbackAs(true)
             self.commandDelegate!.send(result, callbackId: command.callbackId)
         }
         else {
@@ -1003,12 +1004,12 @@ debugPrint("initMgr, mgr: " + String(describing: mgr))
                 "message": "Complete"
                 ] as [String : Any]
             let result = CDVPluginResult(status: CDVCommandStatus_OK, messageAs: response)
-            result?.setKeepCallbackAs(false)
+            result.setKeepCallbackAs(false)
             self.commandDelegate!.send(result, callbackId: command.callbackId)
         }
 
         let result = CDVPluginResult(status: CDVCommandStatus_OK, messageAs: "InstallMgr_remoteInstallModule")
-        result?.setKeepCallbackAs(true)
+        result.setKeepCallbackAs(true)
         self.commandDelegate!.send(result, callbackId: command.callbackId)
     }
 
