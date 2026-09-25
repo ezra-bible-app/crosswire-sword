@@ -20,6 +20,12 @@
 -->
 # Release Notes
 
+### 0.2.9 (Sep 25, 2026)
+* BibleSync works: biblesync 2.2.0 with the Android and Apple interface discovery sent upstream; Android holds a Wi-Fi multicast lock while it runs (CHANGE_WIFI_MULTICAST_STATE); every speaker in the room is heard, not only the first
+* Android: a sword:// or bible:// link the app is opened with reaches the page as handleOpenURL, exactly as cordova-ios does, on a cold start and a warm one
+* iOS: a received BibleSync verse no longer crashes the app
+* The native binaries come from the sword-android-latest and sword-ios-latest links on crosswire.org
+
 ### 0.2.8 (Aug 22, 2026)
 * iOS: builds with cordova-ios 8 and Xcode 27 (xcframeworks for libsword and curl 8.22 with OpenSSL 3.5.8, verified against the iOS trust store)
 * The native binaries of both platforms are no longer in git: `make fetch` in bindings/Android and `make ios` in bindings/objc/dependencies download the published sets from crosswire.org
