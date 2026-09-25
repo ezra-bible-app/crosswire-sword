@@ -715,8 +715,9 @@ debugPrint("initMgr, mgr: " + String(describing: mgr))
             DispatchQueue.global().async {
                 mySWORDPlugin = self
                 org_crosswire_sword_SWMgr_startBibleSync(self.mgr, appName, userName, passphrase, { (cmd : Int8, str1: Optional<UnsafePointer<Int8>>, str2: Optional<UnsafePointer<Int8>>) in
-                    let response1 = String(cString: str1!)
-                    let response2 = String(cString: str2!)
+                    // a nav message carries no second string (flatapi passes 0)
+                    let response1 = str1 == nil ? "" : String(cString: str1!)
+                    let response2 = str2 == nil ? "" : String(cString: str2!)
                     if (mySWORDPlugin != nil && mySWORDPlugin!.bibleSyncCallbackID != "") {
 			if (cmd == CChar("N")) {
 				var retVal = [String:Any]()
