@@ -78,8 +78,27 @@ public class SWORD extends CordovaPlugin {
 	* @param webView The CordovaWebView Cordova is running in.
 	*/
 	// a sword:// or bible:// link the app was opened with, held until the
-	// page asks for it (SWMgr_getLaunchUrl)
+	// page has loaded, then handed to it exactly as cordova-ios's
+	// HandleOpenUrl does: handleOpenURL(url) once deviceready has fired
 	private static String launchUrl = null;
+
+	private void pushOpenUrl(final String url) {
+		final String js = "document.addEventListener('deviceready',function(){if (typeof handleOpenURL === 'function') { handleOpenURL(" + org.json.JSONObject.quote(url) + ");}});";
+		cordova.getActivity().runOnUiThread(new Runnable() { public void run() {
+			webView.getEngine().evaluateJavascript(js, null);
+		}});
+	}
+
+	// cold start: the page is loaded, the link can go in
+	@Override
+	public Object onMessage(String id, Object data) {
+		if ("onPageFinished".equals(id) && launchUrl != null) {
+			String url = launchUrl;
+			launchUrl = null;
+			pushOpenUrl(url);
+		}
+		return null;
+	}
 
 	private static String deepLink(Intent intent) {
 		if (intent == null || intent.getData() == null) return null;
@@ -88,14 +107,12 @@ public class SWORD extends CordovaPlugin {
 		return intent.getDataString();
 	}
 
+	// warm start: the page is up, the link goes straight in
 	@Override
 	public void onNewIntent(Intent intent) {
 		final String url = deepLink(intent);
 		if (url == null) return;
-		launchUrl = url;
-		cordova.getActivity().runOnUiThread(new Runnable() { public void run() {
-			webView.getEngine().evaluateJavascript("if (window.swordDeepLink) swordDeepLink(" + org.json.JSONObject.quote(url) + ");", null);
-		}});
+		pushOpenUrl(url);
 	}
 
 	// who is asking, for the servers we talk to: "Bishop/1.7.905 (OnePlus
@@ -598,6 +615,7 @@ Log.d(TAG, "SWModule_getRenderChapter");
 			String translated = mgr.translate(text, locale);
 			callbackContext.success(translated);
 		}
+		// kept for older pages; the link now arrives through handleOpenURL
 		else if (action.equals("SWMgr_getLaunchUrl")) {
 			String url = launchUrl;
 			launchUrl = null;
