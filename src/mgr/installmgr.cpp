@@ -42,6 +42,9 @@
 #include <curlhttpt.h>
 #else
 #include <ftplibftpt.h>
+#ifdef NSURLAVAILABLE
+#include <nsurlhttpt.h>
+#endif
 #endif
 
 #include <iostream>
@@ -93,6 +96,8 @@ RemoteTransport *InstallMgr::createFTPTransport(const char *host, StatusReporter
 RemoteTransport *InstallMgr::createHTTPTransport(const char *host, StatusReporter *statusReporter) {
 #ifdef CURLAVAILABLE
 	return new CURLHTTPTransport(host, statusReporter);
+#elif defined(NSURLAVAILABLE)
+	return new NSURLHTTPTransport(host, statusReporter);
 #else
 	return 0;
 #endif

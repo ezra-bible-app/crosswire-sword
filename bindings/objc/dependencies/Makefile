@@ -2,9 +2,9 @@ LIBCURLVERSION=7.57.0
 ICUVERSION=53.1
 CLUCENEVERSION=9.21b
 
-# prebuilt iOS xcframeworks for the cordova plugin (each server folder has a
-# README saying how it was built; build-curl-ios.sh here rebuilds curl's)
-IOSCURL=curl-8.22.0-openssl-3.5.8
+# the prebuilt iOS SWORD.xcframework for the cordova plugin (its server
+# folder has a README saying how it was built); iOS needs no curl: HTTP(S)
+# goes through NSURLSession (NSURLHTTPTransport), FTP through ftplib
 IOSSWORD=sword-ios-latest
 PLUGINLIBS=../../cordova/cordova-plugin-crosswire-sword/libs/ios
 
@@ -36,11 +36,7 @@ clucene/unpacked: clucene_src.tar.gz
 	tar xzfv clucene_src.tar.gz
 	touch clucene/unpacked
 
-ios: ${PLUGINLIBS}/curl.xcframework ${PLUGINLIBS}/SWORD.xcframework
-
-${PLUGINLIBS}/curl.xcframework:
-	mkdir -p ${PLUGINLIBS}
-	curl -fsSL ${APPLEDEPS}/${IOSCURL}/curl.xcframework.tar.gz | tar xzf - -C ${PLUGINLIBS}
+ios: ${PLUGINLIBS}/SWORD.xcframework
 
 ${PLUGINLIBS}/SWORD.xcframework:
 	mkdir -p ${PLUGINLIBS}

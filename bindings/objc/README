@@ -1,12 +1,15 @@
 First you'll need to enter dependencies/ folder and type: make
-That also fetches the prebuilt SWORD.xcframework and curl.xcframework
+That also fetches the prebuilt SWORD.xcframework
 (iOS device and Apple silicon simulator, arm64, iOS 15.0) into
 ../cordova/cordova-plugin-crosswire-sword/libs/ios/
 
 Then type make here to copy defs.h and flatapi.h into the plugin.
 
-To rebuild the xcframeworks: dependencies/build-curl-ios.sh for curl
-(on OpenSSL, verifying against the iOS trust store); for SWORD, target
-SWORD of SWORD/SWORD.xcodeproj for iphoneos and iphonesimulator, then
-xcodebuild -create-xcframework.  The README beside each download in
+iOS needs no curl: HTTP(S) goes through Apple's NSURLSession
+(src/mgr/nsurlhttpt.mm, NSURLAVAILABLE) and FTP through sword's ftplib,
+so the app carries no TLS of its own.
+
+To rebuild the xcframework: target SWORD of SWORD/SWORD.xcodeproj for
+iphoneos and iphonesimulator, then xcodebuild -create-xcframework.  The
+README beside each download in
 crosswire.org/ftpmirror/pub/sword/dependencies/apple/ gives the details.

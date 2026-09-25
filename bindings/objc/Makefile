@@ -1,10 +1,9 @@
 #
 # First enter dependencies/ and run make: besides the source packages it
-# fetches the prebuilt SWORD.xcframework and curl.xcframework into
+# fetches the prebuilt SWORD.xcframework into
 # ../cordova/cordova-plugin-crosswire-sword/libs/ios/
 #
-# To build them yourself instead: dependencies/build-curl-ios.sh makes
-# curl.xcframework; SWORD.xcframework is target SWORD of SWORD/SWORD.xcodeproj
+# To build it yourself instead: SWORD.xcframework is target SWORD of SWORD/SWORD.xcodeproj
 # built for iphoneos and iphonesimulator, then xcodebuild -create-xcframework
 # (the README beside each download on crosswire.org gives the invocations)
 #

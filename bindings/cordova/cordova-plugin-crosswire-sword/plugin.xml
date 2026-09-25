@@ -137,13 +137,11 @@
 		<header-file src="src/ios/SWORD-Bridging-Header.h" type="BridgingHeader" />
 		<source-file src="src/ios/SWORD.swift" />
 		<framework src="libs/ios/SWORD.xcframework" custom="true" embed="false" />
-		<framework src="libs/ios/curl.xcframework" custom="true" embed="false" />
 		<framework src="libc++.tbd" />
 		<framework src="libz.tbd" />
 		<framework src="libicucore.tbd" />
 		<framework src="Security.framework" />
 		<framework src="CoreFoundation.framework" />
-		<framework src="SystemConfiguration.framework" />
 
 <!--	<source-file src="lib/ios/libSWORD.a" framework="true" /> -->
 	</platform>
