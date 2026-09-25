@@ -5,7 +5,7 @@ CLUCENEVERSION=9.21b
 # prebuilt iOS xcframeworks for the cordova plugin (each server folder has a
 # README saying how it was built; build-curl-ios.sh here rebuilds curl's)
 IOSCURL=curl-8.22.0-openssl-3.5.8
-IOSSWORD=sword-ios-a8dd86a9
+IOSSWORD=sword-ios-latest
 PLUGINLIBS=../../cordova/cordova-plugin-crosswire-sword/libs/ios
 
 APPLEDEPS=https://crosswire.org/ftpmirror/pub/sword/dependencies/apple

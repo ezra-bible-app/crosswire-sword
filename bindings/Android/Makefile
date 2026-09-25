@@ -3,7 +3,7 @@
 # in git.  `make` copies them from an Android Studio Release build of SWORD/
 # (see README); `make fetch` downloads the prebuilt set published on
 # crosswire.org instead (the server folder's README says how it was built).
-SWORDANDROID=sword-android-a8dd86a9
+SWORDANDROID=sword-android-latest
 ANDROIDDEPS=https://crosswire.org/ftpmirror/pub/sword/dependencies/android
 PLUGINLIBS=../cordova/cordova-plugin-crosswire-sword/libs
 

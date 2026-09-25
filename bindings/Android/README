@@ -31,10 +31,11 @@ of steps 2 and 3:
 
 which downloads libsword-android.tar.gz from
 https://crosswire.org/ftpmirror/pub/sword/dependencies/android/ (one folder
-per sword commit, README and sha256 beside the tarball) into
+per sword commit, README and sha256 beside the tarball; sword-android-latest
+is a link to the current one) into
 ../cordova/cordova-plugin-crosswire-sword/libs/android/.  After an NDK
-rebuild, publish the new set the same way and point SWORDANDROID in the
-Makefile at it.  The iOS xcframeworks have the same arrangement in
+rebuild, publish the new set in a folder of its own the same way and move
+the sword-android-latest link to it; the Makefile never changes.  The iOS xcframeworks have the same arrangement in
 ../objc/dependencies.
 
 Hope this helps get you started.  Let me know your progress!
