@@ -137,6 +137,7 @@ struct NetBuf {
     int xfered;
     int cbbytes;
     int xfered1;
+    int noepsv;		/* the server refused EPSV: PASV from now on */
     char response[256];
 };
 
@@ -725,21 +726,53 @@ static int FtpOpenPort(netbuf *nControl, netbuf **nData, int mode, int dir)
     l = sizeof(sin);
     if (nControl->cmode == FTPLIB_PASSIVE)
       {
+          /* as curl does: EPSV first, then PASV; either way the data
+             connection goes to the control connection's address, and
+             only the port comes from the reply (a server behind NAT often
+             names an address in its 227 reply which cannot be reached) */
+          union {
+              struct sockaddr sa;
+              struct sockaddr_in in;
+          } peer;
+          socklen_t pl = sizeof(peer);
+          unsigned int port = 0;
+
+          if (getpeername(nControl->handle, &peer.sa, &pl) < 0 || peer.sa.sa_family != AF_INET)
+            {
+                perror("getpeername");
+                return -1;
+            }
           memset(&sin, 0, l);
           sin.in.sin_family = AF_INET;
-          if (!FtpSendCmd("PASV",'2',nControl))
+          sin.in.sin_addr = peer.in.sin_addr;
+
+          if (!nControl->noepsv && FtpSendCmd("EPSV",'2',nControl))
+            {
+                /* 229 Entering Extended Passive Mode (|||port|) */
+                char d;
+                cp = strchr(nControl->response,'(');
+                if (cp == NULL || !cp[1])
+                    return -1;
+                d = cp[1];
+                if (cp[2] != d || cp[3] != d || sscanf(cp+4,"%u",&port) != 1)
+                    return -1;
+            }
+          else
+            {
+                nControl->noepsv = 1;
+                if (!FtpSendCmd("PASV",'2',nControl))
+                    return -1;
+                cp = strchr(nControl->response,'(');
+                if (cp == NULL)
+                    return -1;
+                cp++;
+                if (sscanf(cp,"%u,%u,%u,%u,%u,%u",&v[2],&v[3],&v[4],&v[5],&v[0],&v[1]) != 6)
+                    return -1;
+                port = (v[0] << 8) + v[1];
+            }
+          if (port == 0 || port > 65535)
               return -1;
-          cp = strchr(nControl->response,'(');
-          if (cp == NULL)
-              return -1;
-          cp++;
-          sscanf(cp,"%u,%u,%u,%u,%u,%u",&v[2],&v[3],&v[4],&v[5],&v[0],&v[1]);
-          sin.sa.sa_data[2] = v[2];
-          sin.sa.sa_data[3] = v[3];
-          sin.sa.sa_data[4] = v[4];
-          sin.sa.sa_data[5] = v[5];
-          sin.sa.sa_data[0] = v[0];
-          sin.sa.sa_data[1] = v[1];
+          sin.in.sin_port = htons((unsigned short)port);
       }
     else
       {
