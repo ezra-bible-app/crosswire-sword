@@ -20,6 +20,11 @@
 -->
 # Release Notes
 
+### 0.2.10 (Sep 26, 2026)
+* iOS: HTTP(S) through Apple's NSURLSession; no curl or OpenSSL in the app, so App Store Connect's export-compliance questions do not arise (only Apple's encryption)
+* Android: a cloud folder (Google Drive) whose provider is still loading is waited for instead of being taken as empty, a listing that fails is reported to the page, and a file another device replaced is found again by name; the app no longer creates a second personal.conf beside the real one
+* FTP without curl (iOS): EPSV first and PASV's advertised address ignored, as curl does, so sources such as STEP answer; failures are reported as with curl, so file-by-file installs proceed on sources without packages
+
 ### 0.2.9 (Sep 25, 2026)
 * BibleSync works: biblesync 2.2.0 with the Android and Apple interface discovery sent upstream; Android holds a Wi-Fi multicast lock while it runs (CHANGE_WIFI_MULTICAST_STATE); every speaker in the room is heard, not only the first
 * Android: a sword:// or bible:// link the app is opened with reaches the page as handleOpenURL, exactly as cordova-ios does, on a cold start and a warm one
