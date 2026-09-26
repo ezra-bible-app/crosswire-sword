@@ -33,6 +33,7 @@ import android.content.ContentResolver;
 import android.content.Context;
 import android.database.Cursor;
 import android.net.Uri;
+import android.os.Bundle;
 import android.os.ParcelFileDescriptor;
 import android.provider.DocumentsContract;
 import android.provider.DocumentsContract.Document;
@@ -74,6 +75,8 @@ public class SafStorage implements SWMgr.SharedStorage {
 	private final Map<Integer, Staged> staged = new HashMap<Integer, Staged>();
 	// relative path -> document id, learned from listings and creations
 	private final Map<String, String> docIds = new HashMap<String, String>();
+	// how long a first listing of a cloud folder may keep loading before we take what there is
+	private static final long LIST_WAIT_MILLIS = 15000, LIST_POLL_MILLIS = 250;
 
 	public SafStorage(Context context, Uri treeUri) {
 		this.stagingDir = new java.io.File(context.getCacheDir(), "saf-staging");
@@ -159,7 +162,30 @@ public class SafStorage implements SWMgr.SharedStorage {
 		String prefix = (dirPath.length() == 0) ? "" : dirPath + "/";
 		Cursor c = null;
 		try {
-			c = resolver.query(childrenUri, COLUMNS, null, null, null);
+			// a cloud provider (Google Drive) answers the first query on a folder
+			// it has not fetched yet with a partial, often empty, cursor flagged
+			// EXTRA_LOADING: taking that as the folder's contents made Bishop
+			// think a bookmarks file was absent and create a second one.  Ask
+			// again until the provider says it is done, within reason.
+			long deadline = System.currentTimeMillis() + LIST_WAIT_MILLIS;
+			while (true) {
+				c = resolver.query(childrenUri, COLUMNS, null, null, null);
+				if (c == null) break;
+				Bundle extras = c.getExtras();
+				String error = (extras == null) ? null : extras.getString(DocumentsContract.EXTRA_ERROR);
+				if (error != null) {
+					Log.w(TAG, "list failed for " + dirPath + ": provider says " + error);
+					return null;
+				}
+				boolean loading = extras != null && extras.getBoolean(DocumentsContract.EXTRA_LOADING, false);
+				if (!loading) break;
+				if (System.currentTimeMillis() > deadline) {
+					Log.w(TAG, "list of " + dirPath + " still loading after " + LIST_WAIT_MILLIS + " ms: not trusting it");
+					return null;
+				}
+				c.close(); c = null;
+				try { Thread.sleep(LIST_POLL_MILLIS); } catch (InterruptedException e) { break; }
+			}
 			if (c != null) {
 				while (c.moveToNext()) {
 					SWMgr.FileInfo info = fromCursor(c);
@@ -191,6 +217,20 @@ public class SafStorage implements SWMgr.SharedStorage {
 
 	@Override
 	public int open(String path, String mode, boolean create) {
+		int fd = openResolved(path, mode, create);
+		if (fd >= 0) return fd;
+		// the id we had may be stale: another device can replace a file
+		// under the same name (a cloud provider gives it a new id); forget
+		// what we knew and look the name up once more
+		String known;
+		synchronized (this) { known = docIds.get(path); }
+		if (known == null) return fd;
+		forget(path);
+		Log.i(TAG, "retrying " + path + " by name after a failed open");
+		return openResolved(path, mode, create);
+	}
+
+	private int openResolved(String path, String mode, boolean create) {
 		String id = resolve(path);
 		if (id == null) {
 			if (!create) return -1;
@@ -301,12 +341,18 @@ public class SafStorage implements SWMgr.SharedStorage {
 		return info;
 	}
 
+	/** set when the last list() could not be trusted (the provider failed or
+	 *  never finished loading): native code sees only an empty listing, and
+	 *  the app must not take that for an empty folder */
+	public volatile boolean lastListFailed = false;
+
 	@Override
 	public SWMgr.FileInfo[] list(String path) {
+		lastListFailed = false;
 		String id = resolve(path);
 		if (id == null) return null;
 		List<SWMgr.FileInfo> entries = listChildren(path, id);
-		if (entries == null) return null;
+		if (entries == null) { lastListFailed = true; return null; }
 		return entries.toArray(new SWMgr.FileInfo[entries.size()]);
 	}
 

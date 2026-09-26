@@ -40,6 +40,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import org.crosswire.android.sword.SWMgr;
+import org.crosswire.android.sword.SafStorage;
 import org.crosswire.android.sword.AndroidMgr;
 import org.crosswire.android.sword.SWModule;
 import org.crosswire.android.sword.InstallMgr;
@@ -635,9 +636,19 @@ Log.d(TAG, "SWModule_getRenderChapter");
 			else callbackContext.error("couldn't write: " + args.getString(0));
 		}
 		else if (action.equals("SWMgr_listDir")) {
-			JSONArray r = new JSONArray();
-			for (String s : mgr.listDir(args.getString(0))) r.put(s);
-			callbackContext.success(r);
+			// off the WebView thread: a cloud folder's provider may take
+			// seconds to finish loading, and the listing waits for it
+			final String path = args.getString(0);
+			cordova.getThreadPool().execute(new Runnable() { public void run() {
+				JSONArray r = new JSONArray();
+				for (String s : mgr.listDir(path)) r.put(s);
+				// a shared or data folder whose provider failed or never finished
+				// loading answers an empty listing natively; the page must know
+				SWMgr.SharedStorage ds = mgr.getDataStorage(), ss = mgr.getSharedStorage();
+				boolean failed = (ds instanceof SafStorage && ((SafStorage) ds).lastListFailed) || (ss instanceof SafStorage && ((SafStorage) ss).lastListFailed);
+				if (failed) callbackContext.error("couldn't list: " + path);
+				else callbackContext.success(r);
+			}});
 		}
 		else if (action.equals("SWMgr_removeFile")) {
 			if (mgr.removeFile(args.getString(0))) callbackContext.success();
