@@ -90,6 +90,7 @@ public class SwordOrb extends Object implements HttpSessionBindingListener {
 	int    intervalCount = 0;
 	long   intervalStamp = 0;
 	long   blacklistTill = 0;
+	boolean terminated = false;	// set once we have shut our ORB down; finalize() must then do nothing
 
 	private SWMgr attach() {
 
@@ -124,15 +125,31 @@ log(ERROR, "failed in attach", e);
 	}
 
 
-//	this doesn't seem to work.  Never seems to get called for me
+	// Safety net only: valueUnbound() normally shuts the ORB down when the
+	// session expires. Without the guard, finalize() ran after that, failed to
+	// attach to the already-dead ORB, and getSWMgrInstance() then LAUNCHED a
+	// fresh swordorbserver just to terminate it -- one wasted ~90 MB process
+	// per expired session.
 	public void finalize () throws Throwable {
+		if (terminated) return;
 		// shut down external process
 		try {
 log(INFO, "calling finalize.", null);
-			getSWMgrInstance(false).terminate();
+			terminateOrb();
 		}
 		catch (Exception e) {}	// we know this doesn't return property cuz we killed the orb! :)
 
+	}
+
+	// Terminate our ORB if it is still running. Only attach(); never
+	// getSWMgrInstance(), which would start a new ORB when none is running.
+	private void terminateOrb() {
+		terminated = true;
+		SWMgr mgr = attach();
+		if (mgr != null) {
+			try { mgr.terminate(); }
+			catch (Throwable e) {}	// expected: the ORB exits before replying
+		}
 	}
 
 
@@ -147,10 +164,10 @@ int size = -1;
 size = orbs.size();
 				orbs.remove(this);
 			}
-log(INFO, "calling valueUnbound. size before: " + size + "; size after: "+orbs.size(), null);
-			getSWMgrInstance(false).terminate();
+log(INFO, "calling valueUnbound. size before: " + size + "; size after: " + ((orbs != null) ? orbs.size() : -1), null);
+			terminateOrb();
 		}
-		catch (Exception e) {}	// we know this doesn't return properly cuz we killed the orb! :)
+		catch (Exception e) {}
 //		catch (Exception e) {e.printStackTrace();}	// we know this doesn't return properly cuz we killed the orb! :)
 	}
 
