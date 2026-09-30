@@ -535,10 +535,34 @@ SWMgr.prototype.getDataStorage = function(callback) {
 
 // Let the user pick a study-data folder.  SWORD is re-initialized.  Calls
 // back with the folder's uri, or "" if the user cancelled.
-SWMgr.prototype.chooseDataStorage = function(callback) {
+// provider (iOS): the name the user chose the folder under ("iCloud Drive",
+// ...), kept for the label describeTree answers; Android ignores it
+SWMgr.prototype.chooseDataStorage = function(callback, provider) {
 	exec(callback?callback:function() {},
 		function(err) { utils.alert('[ERROR] problem: ' + err); },
-		"SWORD", "SWMgr_chooseDataStorage", []
+		"SWORD", "SWMgr_chooseDataStorage", [provider || ""]
+	);
+}
+
+// iOS (SWORD.features.dataFiles): pick study-data FILES in place, several at
+// once, where a provider (e.g. Google Drive) grants no folder; they appear
+// under getDataPath() as bookmarks/.  Answers "files:<provider>", or "" if cancelled.
+SWMgr.prototype.chooseDataFiles = function(callback, provider) {
+	exec(callback?callback:function() {},
+		function(err) { utils.alert('[ERROR] problem: ' + err); },
+		"SWORD", "SWMgr_chooseDataFiles", [provider || ""]
+	);
+}
+
+// iOS (SWORD.features.dataFiles): put the bookmark files Bishop has now onto a
+// provider without folder access (e.g. Google Drive), as sword-studydata/
+// bookmarks/*.conf: the user saves that folder there, then opens the files
+// once; they become the picked files.  Answers "files:<provider>", or "" if
+// cancelled.
+SWMgr.prototype.exportDataFiles = function(callback, provider) {
+	exec(callback?callback:function() {},
+		function(err) { utils.alert('[ERROR] problem: ' + err); },
+		"SWORD", "SWMgr_exportDataFiles", [provider || ""]
 	);
 }
 
@@ -607,7 +631,7 @@ HTTPUtils.prototype.METHOD_POST =  1;
 
 HTTPUtils.prototype.makeRequest = function(url, postData, callback, method) {
 	var result = null;
-	if (!method) method = this.METHOD_POST;
+	if (method === undefined || method === null) method = this.METHOD_POST;	// METHOD_GET is 0
 	exec(callback?callback:function(r) { if (r && r.length > 0) result = r; },
 		function(err) { utils.alert('[ERROR] problem: ' + err); },
 		"SWORD", "HTTPUtils_makeRequest", [url, postData, method]
@@ -639,6 +663,9 @@ function SWORD() {
 
 	this.available = false;
 	this.version = null;
+	// what this platform's plugin offers, e.g. { dataStorage: true, sharedStorage: false };
+	// null from a plugin which does not say
+	this.features = null;
 
 	this.installMgr = new InstallMgr();
 	this.mgr        = new SWMgr();
@@ -648,6 +675,7 @@ function SWORD() {
 		me.init(function(info) {
 			me.available = true;
 			me.version = info.version;
+			me.features = info.features || null;
 			channel.onSWORDReady.fire();
 		},function(e) {
 			me.available = false;
