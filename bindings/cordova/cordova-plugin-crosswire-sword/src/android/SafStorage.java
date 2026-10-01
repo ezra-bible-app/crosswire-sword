@@ -89,6 +89,12 @@ public class SafStorage implements SWMgr.SharedStorage {
 
 	public Uri getTreeUri() { return treeUri; }
 
+	/** the picked folder's own name as the provider reports it, or null */
+	public String rootName() {
+		SWMgr.FileInfo info = queryOne(docUri(treeDocId));
+		return (info == null || info.name == null || info.name.length() == 0) ? null : info.name;
+	}
+
 	/** true if we still hold a grant for the tree and it is reachable */
 	public boolean isAvailable() {
 		return stat("") != null;
@@ -225,6 +231,18 @@ public class SafStorage implements SWMgr.SharedStorage {
 		String known;
 		synchronized (this) { known = docIds.get(path); }
 		if (known == null) return fd;
+		forget(path);
+		// ask the provider to refresh what it knows about the file and its
+		// folder (a cloud provider's local record can lag a change made on
+		// the web or on another device) before the name is looked up again
+		try {
+			resolver.refresh(docUri(known), null, null);
+			String parentId = resolve(parentOf(path));
+			if (parentId != null) resolver.refresh(DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, parentId), null, null);
+		}
+		catch (Exception e) {
+			Log.i(TAG, "refresh not honoured for " + path + ": " + e);
+		}
 		forget(path);
 		Log.i(TAG, "retrying " + path + " by name after a failed open");
 		return openResolved(path, mode, create);

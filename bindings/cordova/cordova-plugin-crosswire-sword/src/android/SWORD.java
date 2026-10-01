@@ -53,6 +53,8 @@ import android.net.wifi.WifiManager;
 import android.app.Activity;
 
 public class SWORD extends CordovaPlugin {
+	// the app-neutral study-data folder (see SWMgr_getDataPath)
+	public static final String STUDY_DATA_FOLDER = "sword-studydata";
 	// held while BibleSync runs: without it most Wi-Fi drivers filter out the multicast group
 	private WifiManager.MulticastLock multicastLock = null;
 	public static final String TAG = "SWORD";
@@ -229,6 +231,15 @@ public class SWORD extends CordovaPlugin {
 		if (action.equals("initSWORD")) {
 			JSONObject r = new JSONObject();
 			r.put("version", mgr.version());
+			// what the page may offer on Android (SWORD.features): a shared
+			// module library and a study-data folder, both picked as SAF trees;
+			// no picking of single files (a tree grant covers any provider)
+			JSONObject features = new JSONObject();
+			features.put("sharedStorage", true);
+			features.put("dataStorage", true);
+			features.put("dataFiles", false);
+			features.put("bibleSync", true);
+			r.put("features", features);
 			callbackContext.success(r);
 		}
 		else if (action.equals("echo")) {
@@ -696,7 +707,26 @@ Log.d(TAG, "SWModule_getRenderChapter");
 			callbackContext.success(label);
 		}
 		else if (action.equals("SWMgr_getDataPath")) {
-			callbackContext.success(mgr.getDataPath());
+			// study data lives in an app-neutral folder named sword-studydata
+			// (bookmarks/ inside it, later notes and the like), so several
+			// devices and several SWORD apps can share one.  Decided by what
+			// the picked folder holds, not by its name (a provider can report
+			// a name from before a rename for a while): a folder which already
+			// has bookmarks/ at its root IS the study-data folder, and so is one
+			// named sword-studydata (just created to be it, so still empty);
+			// otherwise sword-studydata/ inside it, existing or made on the
+			// first write.  The provider is asked, so off the WebView thread.
+			cordova.getThreadPool().execute(new Runnable() { public void run() {
+				String path = mgr.getDataPath();
+				SWMgr.SharedStorage ds = mgr.getDataStorage();
+				if (ds instanceof SafStorage && path.startsWith("/sword-data")) {
+					SafStorage saf = (SafStorage) ds;
+					SWMgr.FileInfo root = saf.stat("bookmarks");
+					boolean isIt = (root != null && root.isDirectory) || STUDY_DATA_FOLDER.equals(saf.rootName());
+					if (!isIt) path += STUDY_DATA_FOLDER + "/";
+				}
+				callbackContext.success(path);
+			}});
 		}
 		else if (action.equals("SWMgr_getDataStorage")) {
 			// the separately chosen study-data folder, or "" if study data lives beside the library
