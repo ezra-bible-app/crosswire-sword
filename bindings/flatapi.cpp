@@ -125,20 +125,31 @@ SWLOGD("bibleSync callback msg: %c; pkt_uuid: %s; bible: %s; ref: %s; alt: %s; g
 	if (bibleSyncListener) {
 SWLOGD("bibleSync listener is true");
 		switch(cmd) {
-		// error
+		// error: the library has shut itself down (a failed transmit, a
+		// network setup error); the app must hear, or it shows a sync as
+		// sent which went nowhere
 		case 'E':
-		// mismatch
+			(*bibleSyncListener)(cmd, info.c_str(), dump.c_str());
+			break;
+		// mismatch (another passphrase): not ours to report
 		case 'M':
 			break;
 		// new speaker: the library listens to the first speaker only;
 		// a study group wants every phone in the room heard
 		case 'S':
 			if (bibleSync) bibleSync->listenToSpeaker(true, pkt_uuid);
+			(*bibleSyncListener)(cmd, (bible + " @ " + ref).c_str(), (group + "; " + domain + "; " + pkt_uuid).c_str());
 			break;
-		// dead speaker
-		case 'D':
-		// announce
+		// a peer: announced itself ('A') or is a speaker we now listen to
+		// ('S').  The library puts the user in bible, the address in ref, the
+		// app and version in group, the device in domain; its uuid identifies
+		// it across these and the 'D' below
 		case 'A':
+			(*bibleSyncListener)(cmd, (bible + " @ " + ref).c_str(), (group + "; " + domain + "; " + pkt_uuid).c_str());
+			break;
+		// a speaker went quiet: only its uuid is known
+		case 'D':
+			(*bibleSyncListener)(cmd, pkt_uuid.c_str(), "");
 			break;
 		// chat message
 		case 'C': {
@@ -1858,6 +1869,14 @@ SWLOGD("libsword: sendBibleSyncMessage() bibleSync not active; message not sent.
 
 	BibleSync_xmit_status result = bibleSync->Transmit(modName.c_str(), osisRef.c_str());
 SWLOGD("libsword: sendBibleSyncMessage() finished with status code: %d", result);
+	// a send the library declined before the socket (a failed sendto it
+	// reports itself): the app hears why, instead of showing the verse as sent
+	if (result != BSP_XMIT_OK && bibleSyncListener) {
+		static const char *why[] = { "ok", "failed", "no socket", "bad message type", "an audience member cannot transmit", "still receiving" };
+		SWBuf info = "BibleSync: Transmit refused: ";
+		info += (result >= 0 && result < 6) ? why[result] : "unknown status";
+		(*bibleSyncListener)('E', info.c_str(), "");
+	}
 #else
 SWLOGD("libsword: sendBibleSyncMessage() bibleSync not active; message not sent.");
 #endif
@@ -1900,6 +1919,11 @@ SWLOGD("bibleSync initializing c-tor");
 		bibleSync = new BibleSync(appName.c_str(), (const char *)SWVersion().currentVersion, userName.c_str());
 SWLOGD("bibleSync initializing setMode");
 		bibleSync->setMode(BSP_MODE_PERSONAL, bibleSyncCallback, passphrase.c_str());
+	}
+	// which interface it is on: the app shows it, so a wrong one is seen
+	if (bibleSync && bibleSyncListener) {
+		SWBuf iface = bibleSync->getInterface().c_str();
+		(*bibleSyncListener)('I', iface.c_str(), 0);
 	}
 SWLOGD("startBibleSync - starting while listener");
 	starting = false;

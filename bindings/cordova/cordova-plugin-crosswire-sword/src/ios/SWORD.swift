@@ -98,8 +98,8 @@ var mySWORDPlugin:SWORD? = nil
             "version": libswordVersion,
             // what the page may offer on iOS (SWORD.features)
             // bibleSync: multicast needs com.apple.developer.networking.multicast,
-            // requested from Apple; true once the app is signed with it
-            "features": [ "dataStorage": true, "dataFiles": true, "sharedStorage": false, "bibleSync": false ]
+            // which Apple granted the account on 2026-10-01 and Bishop's config.xml carries
+            "features": [ "dataStorage": true, "dataFiles": true, "sharedStorage": false, "bibleSync": true ]
         ] as [AnyHashable : Any]
 		self.commandDelegate!.send(CDVPluginResult(status: CDVCommandStatus_OK, messageAs: info), callbackId: command.callbackId)
 	}
@@ -1217,8 +1217,10 @@ debugPrint("initMgr, mgr: " + String(describing: mgr))
                     // a nav message carries no second string (flatapi passes 0)
                     let response1 = str1 == nil ? "" : String(cString: str1!)
                     let response2 = str2 == nil ? "" : String(cString: str2!)
+                    // (CChar("N") is Int8's failable parse of the string "N", i.e. nil,
+                    // which equals no command: every message was dropped that way)
                     if (mySWORDPlugin != nil && mySWORDPlugin!.bibleSyncCallbackID != "") {
-			if (cmd == CChar("N")) {
+			if (cmd == CChar(UInt8(ascii: "N"))) {
 				var retVal = [String:Any]()
 				retVal["cmd"]     = "nav";
 				retVal["osisRef"] = response1;
@@ -1226,11 +1228,41 @@ debugPrint("initMgr, mgr: " + String(describing: mgr))
 				result.setKeepCallbackAs(true)
 				mySWORDPlugin!.commandDelegate!.send(result, callbackId: mySWORDPlugin!.bibleSyncCallbackID)
 			}
-			else if (cmd == CChar("C")	) {
+			else if (cmd == CChar(UInt8(ascii: "C"))	) {
 				var retVal = [String:Any]()
 				retVal["cmd"]     = "chat";
 				retVal["user"]    = response1;
 				retVal["message"] = response2;
+				let result = CDVPluginResult(status: CDVCommandStatus_OK, messageAs: retVal)
+				result.setKeepCallbackAs(true)
+				mySWORDPlugin!.commandDelegate!.send(result, callbackId: mySWORDPlugin!.bibleSyncCallbackID)
+			}
+			else if (cmd == CChar(UInt8(ascii: "I"))) {
+				// the interface address BibleSync is on
+				var retVal = [String:Any]()
+				retVal["cmd"]       = "info";
+				retVal["interface"] = response1;
+				let result = CDVPluginResult(status: CDVCommandStatus_OK, messageAs: retVal)
+				result.setKeepCallbackAs(true)
+				mySWORDPlugin!.commandDelegate!.send(result, callbackId: mySWORDPlugin!.bibleSyncCallbackID)
+			}
+			else if (cmd == CChar(UInt8(ascii: "A")) || cmd == CChar(UInt8(ascii: "S")) || cmd == CChar(UInt8(ascii: "D"))) {
+				// a peer announced itself, became a speaker we listen to, or went quiet
+				var retVal = [String:Any]()
+				retVal["cmd"]   = "peer";
+				retVal["state"] = cmd == CChar(UInt8(ascii: "A")) ? "announce" : (cmd == CChar(UInt8(ascii: "S")) ? "speaker" : "gone");
+				retVal["who"]   = response1;	// user @ address ('gone': the uuid)
+				retVal["what"]  = response2;	// app version; device; uuid
+				let result = CDVPluginResult(status: CDVCommandStatus_OK, messageAs: retVal)
+				result.setKeepCallbackAs(true)
+				mySWORDPlugin!.commandDelegate!.send(result, callbackId: mySWORDPlugin!.bibleSyncCallbackID)
+			}
+			else if (cmd == CChar(UInt8(ascii: "E"))) {
+				// the library stopped itself: what it said, and its detail
+				var retVal = [String:Any]()
+				retVal["cmd"]     = "error";
+				retVal["message"] = response1;
+				retVal["detail"]  = response2;
 				let result = CDVPluginResult(status: CDVCommandStatus_OK, messageAs: retVal)
 				result.setKeepCallbackAs(true)
 				mySWORDPlugin!.commandDelegate!.send(result, callbackId: mySWORDPlugin!.bibleSyncCallbackID)
