@@ -552,6 +552,8 @@ Log.d(TAG, "SWModule_getRenderChapter");
 			final String appName = args.getString(0);
 			final String userName = args.getString(1);
 			final String passphrase = args.getString(2);
+			// repeatCount, repeatDelayMS, peerLifetimeS: -1 (or absent) keeps the default
+			mgr.setBibleSyncOptions(args.optInt(3, -1), args.optInt(4, -1), args.optInt(5, -1));
 
 			if (multicastLock == null) {
 				WifiManager wifi = (WifiManager) cordova.getActivity().getApplicationContext().getSystemService(Context.WIFI_SERVICE);
@@ -586,6 +588,42 @@ Log.d(TAG, "SWModule_getRenderChapter");
 						}
 						catch (Exception e) { e.printStackTrace(); }
 					}
+					public void infoReceived(String iface) {
+						try {
+							JSONObject m = new JSONObject();
+							m.put("cmd", "info");
+							m.put("interface", iface);
+							PluginResult result = new PluginResult(PluginResult.Status.OK, m);
+							result.setKeepCallback(true);
+							bibleSyncListener.sendPluginResult(result);
+						}
+						catch (Exception e) { e.printStackTrace(); }
+					}
+					public void peerReceived(char state, String who, String what) {
+						try {
+							JSONObject m = new JSONObject();
+							m.put("cmd", "peer");
+							m.put("state", state == 'A' ? "announce" : (state == 'S' ? "speaker" : "gone"));
+							m.put("who", who);
+							m.put("what", what);
+							PluginResult result = new PluginResult(PluginResult.Status.OK, m);
+							result.setKeepCallback(true);
+							bibleSyncListener.sendPluginResult(result);
+						}
+						catch (Exception e) { e.printStackTrace(); }
+					}
+					public void errorReceived(String message, String detail) {
+						try {
+							JSONObject m = new JSONObject();
+							m.put("cmd", "error");
+							m.put("message", message);
+							m.put("detail", detail);
+							PluginResult result = new PluginResult(PluginResult.Status.OK, m);
+							result.setKeepCallback(true);
+							bibleSyncListener.sendPluginResult(result);
+						}
+						catch (Exception e) { e.printStackTrace(); }
+					}
 				});
 			    }
 			});
@@ -598,6 +636,16 @@ Log.d(TAG, "SWModule_getRenderChapter");
 			mgr.stopBibleSync();
 			if (multicastLock != null && multicastLock.isHeld()) multicastLock.release();
 			callbackContext.success();
+		}
+		else if (action.equals("SWMgr_getBibleSyncStatus")) {
+			// "alive 10.0.0.5" -> { state, alive, interface, current }
+			String[] s = mgr.getBibleSyncStatus().split(" ");
+			JSONObject r = new JSONObject();
+			r.put("state", s[0]);
+			r.put("alive", s[0].equals("alive"));
+			r.put("interface", s.length > 1 ? s[1] : "");
+			r.put("current", s.length > 2 ? s[2] : (s.length > 1 ? s[1] : ""));
+			callbackContext.success(r);
 		}
 		else if (action.equals("SWMgr_setJavascript")) {
 			boolean val = args.getBoolean(0);

@@ -241,10 +241,26 @@ JNIEXPORT void JNICALL Java_org_crosswire_android_sword_SWMgr_startBibleSync
 
 /*
  * Class:     org_crosswire_android_sword_SWMgr
+ * Method:    setBibleSyncOptions
+ * Signature: (III)V
+ */
+JNIEXPORT void JNICALL Java_org_crosswire_android_sword_SWMgr_setBibleSyncOptions
+  (JNIEnv *, jobject, jint, jint, jint);
+
+/*
+ * Class:     org_crosswire_android_sword_SWMgr
  * Method:    stopBibleSync
  * Signature: ()V
  */
 JNIEXPORT void JNICALL Java_org_crosswire_android_sword_SWMgr_stopBibleSync
+  (JNIEnv *, jobject);
+
+/*
+ * Class:     org_crosswire_android_sword_SWMgr
+ * Method:    getBibleSyncStatus
+ * Signature: ()Ljava/lang/String;
+ */
+JNIEXPORT jstring JNICALL Java_org_crosswire_android_sword_SWMgr_getBibleSyncStatus
   (JNIEnv *, jobject);
 
 /*

@@ -119,6 +119,10 @@ void percentUpdate(char percent, void *userData) {
 using std::string;
 BibleSync *bibleSync = 0;
 org_biblesync_MessageReceivedCallback bibleSyncListener = 0;
+// what the app may set before a start (setBibleSyncOptions)
+int bibleSyncRepeatCount = 2;		// each verse goes out this many more times
+int bibleSyncRepeatDelayMS = 500;	// at least this far apart
+int bibleSyncPeerLifetimeS = 1800;	// a silent peer is given up after this long
 
 void bibleSyncCallback(char cmd, string pkt_uuid, string bible, string ref, string alt, string group, string domain, string info, string dump) {
 SWLOGD("bibleSync callback msg: %c; pkt_uuid: %s; bible: %s; ref: %s; alt: %s; group: %s; domain: %s; info: %s; dump: %s", cmd, pkt_uuid.c_str(), bible.c_str(), ref.c_str(), alt.c_str(), group.c_str(), domain.c_str(), info.c_str(), dump.c_str());
@@ -1917,12 +1921,26 @@ SWLOGD("startBibleSync - calling init");
 	if (!bibleSync) {
 SWLOGD("bibleSync initializing c-tor");
 		bibleSync = new BibleSync(appName.c_str(), (const char *)SWVersion().currentVersion, userName.c_str());
+		// nobody resends multicast and Wi-Fi loses some: each verse goes out
+		// more than once, and a peer is not given up for a few lost beacons.
+		// Receive() below is called every 2 seconds: a beacon every 5th call
+		// is one every 10 seconds, as the library intends
+		bibleSync->setBeaconCount(5);
+#ifdef BSP_REPEAT_MAX
+		bibleSync->setRepeat(bibleSyncRepeatCount, bibleSyncRepeatDelayMS);
+		int lifetime = bibleSyncPeerLifetimeS / 10;
+		bibleSync->setBeaconMultiplier(lifetime > 255 ? 255 : lifetime);
+#endif
 SWLOGD("bibleSync initializing setMode");
 		bibleSync->setMode(BSP_MODE_PERSONAL, bibleSyncCallback, passphrase.c_str());
 	}
 	// which interface it is on: the app shows it, so a wrong one is seen
 	if (bibleSync && bibleSyncListener) {
+#ifdef BSP_REPEAT_MAX
 		SWBuf iface = bibleSync->getInterface().c_str();
+#else
+		SWBuf iface = "";
+#endif
 		(*bibleSyncListener)('I', iface.c_str(), 0);
 	}
 SWLOGD("startBibleSync - starting while listener");
@@ -1938,6 +1956,56 @@ SWLOGD("bibleSyncListener - sleeping for 2 seconds");
 #else
 SWLOGD("registerBibleSyncListener: !!! BibleSync disabled in native code.");
 #endif
+}
+
+
+/*
+ * Class:     org_crosswire_sword_SWMgr
+ * Method:    setBibleSyncOptions
+ * Signature: (III)V
+ *
+ * For the next startBibleSync; a negative value leaves that one as it is.
+ * repeatCount: how many more times each verse is sent (default 2);
+ * repeatDelayMS: at least this long between those (default 500);
+ * peerLifetimeS: a peer not heard from for this many seconds is given up (default 1800)
+ */
+void SWDLLEXPORT org_crosswire_sword_SWMgr_setBibleSyncOptions
+		(SWHANDLE hMgr, int repeatCount, int repeatDelayMS, int peerLifetimeS) {
+
+#ifdef BIBLESYNC
+	if (repeatCount >= 0) bibleSyncRepeatCount = repeatCount;
+	if (repeatDelayMS >= 0) bibleSyncRepeatDelayMS = repeatDelayMS;
+	if (peerLifetimeS >= 0) bibleSyncPeerLifetimeS = peerLifetimeS;
+#endif
+}
+
+
+/*
+ * Class:     org_crosswire_sword_SWMgr
+ * Method:    getBibleSyncStatus
+ * Signature: ()Ljava/lang/String;
+ *
+ * "off" (not running), "alive <address>",
+ * "disabled <address>" (the library shut itself down) or
+ * "moved <address> <address now>" (the network changed under it)
+ */
+const char * SWDLLEXPORT org_crosswire_sword_SWMgr_getBibleSyncStatus
+		(SWHANDLE hMgr) {
+
+	static SWBuf status;
+	status = "off";
+#if defined(BIBLESYNC) && defined(BSP_REPEAT_MAX)
+	// whether the session a resumed app finds is still worth keeping
+	// (a libbiblesync older than its sync repeats cannot say: "off")
+	if (bibleSync && ::bibleSyncListener) {
+		SWBuf joined = bibleSync->getInterface().c_str();
+		SWBuf now = bibleSync->getCurrentInterface().c_str();
+		if (bibleSync->getMode() == BSP_MODE_DISABLE) status = SWBuf("disabled ") + joined;
+		else if (joined != now) status = SWBuf("moved ") + joined + " " + now;
+		else status = SWBuf("alive ") + joined;
+	}
+#endif
+	return status.c_str();
 }
 
 

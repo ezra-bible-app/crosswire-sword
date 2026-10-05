@@ -88,6 +88,10 @@ namespace {
     BibleSync *bibleSync = nullptr;
     using std::string;
     jobject bibleSyncListener = nullptr;
+    // what the app may set before a start (setBibleSyncOptions)
+    int bibleSyncRepeatCount = 2;		// each verse goes out this many more times
+    int bibleSyncRepeatDelayMS = 500;	// at least this far apart
+    int bibleSyncPeerLifetimeS = 1800;	// a silent peer is given up after this long
     JNIEnv *bibleSyncListenerEnv = nullptr;
 #endif
     SWBuf STORAGE_BASE;
@@ -373,52 +377,108 @@ SWLOGI("initInstall: instantiated InstallMgr with baseDir: %s", baseDir.c_str())
 }
 
 #ifdef BIBLESYNC
+// the calling thread's own env: the library calls back from the listen loop's
+// thread (Receive) and from whichever thread sends (Transmit)
+static JNIEnv *bibleSyncEnv() {
+	JNIEnv *env = nullptr;
+	if (!javaVM || javaVM->GetEnv((void **)&env, JNI_VERSION_1_6) != JNI_OK) return nullptr;
+	return env;
+}
+
+// what the app shows about the session itself, to the listener:
+// 'I' the interface (s1); 'A', 'S' a peer (s1 = user @ address, s2 = app
+// version; device; uuid); 'D' a speaker gone quiet (s1 = uuid); 'E' an error
+// (s1 = what the library said, s2 = its detail)
+static void bibleSyncTell(char cmd, const char *s1, const char *s2) {
+	jobject listener = bibleSyncListener;
+	JNIEnv *env = bibleSyncEnv();
+	if (!listener || !env) return;
+	jclass cls = env->GetObjectClass(listener);
+	jstring j1 = strToUTF8Java(env, s1 ? s1 : "");
+	jstring j2 = strToUTF8Java(env, s2 ? s2 : "");
+	switch (cmd) {
+		case 'I': {
+			jmethodID mid = env->GetMethodID(cls, "infoReceived", "(Ljava/lang/String;)V");
+			if (mid) env->CallVoidMethod(listener, mid, j1);
+			break;
+		}
+		case 'E': {
+			jmethodID mid = env->GetMethodID(cls, "errorReceived", "(Ljava/lang/String;Ljava/lang/String;)V");
+			if (mid) env->CallVoidMethod(listener, mid, j1, j2);
+			break;
+		}
+		default: {
+			jmethodID mid = env->GetMethodID(cls, "peerReceived", "(CLjava/lang/String;Ljava/lang/String;)V");
+			if (mid) env->CallVoidMethod(listener, mid, (jchar)cmd, j1, j2);
+			break;
+		}
+	}
+	// (a listener compiled before these methods existed)
+	if (env->ExceptionCheck()) env->ExceptionClear();
+	env->DeleteLocalRef(j1);
+	env->DeleteLocalRef(j2);
+	env->DeleteLocalRef(cls);
+}
+
 void bibleSyncCallback(char cmd, string pkt_uuid, string bible, string ref, string alt, string group, string domain, string info, string dump) {
 //SWLOGD("bibleSync callback msg: %c; pkt_uuid: %s; bible: %s; ref: %s; alt: %s; group: %s; domain: %s; info: %s; dump: %s", cmd, pkt_uuid.c_str(), bible.c_str(), ref.c_str(), alt.c_str(), group.c_str(), domain.c_str(), info.c_str(), dump.c_str());
-	if (bibleSyncListener) {
+	jobject listener = bibleSyncListener;
+	JNIEnv *env = bibleSyncEnv();
+	if (listener && env) {
 //SWLOGD("bibleSync listener is true");
-		jclass cls = bibleSyncListenerEnv->GetObjectClass(bibleSyncListener);
+		jclass cls = env->GetObjectClass(listener);
 		switch (cmd) {
-			// error
+				// error: the library has shut itself down (a failed transmit, a
+				// network setup error) or a beacon did not go out; the app must
+				// hear, or it shows a sync as sent which went nowhere
 			case 'E':
-				// mismatch
+				bibleSyncTell(cmd, info.c_str(), dump.c_str());
+				break;
+				// mismatch (another passphrase): not ours to report
 			case 'M':
 				break;
 				// new speaker: the library listens to the first speaker only;
 				// a study group wants every phone in the room heard
 			case 'S':
 				if (bibleSync) bibleSync->listenToSpeaker(true, pkt_uuid);
+				bibleSyncTell(cmd, (bible + " @ " + ref).c_str(), (group + "; " + domain + "; " + pkt_uuid).c_str());
 				break;
-				// dead speaker
-			case 'D':
-				// announce
+				// a peer: announced itself ('A') or is a speaker we now listen
+				// to ('S').  The library puts the user in bible, the address in
+				// ref, the app and version in group, the device in domain; its
+				// uuid identifies it across these and the 'D' below
 			case 'A':
+				bibleSyncTell(cmd, (bible + " @ " + ref).c_str(), (group + "; " + domain + "; " + pkt_uuid).c_str());
+				break;
+				// a speaker went quiet: only its uuid is known
+			case 'D':
+				bibleSyncTell(cmd, pkt_uuid.c_str(), "");
 				break;
 				// chat message
 			case 'C': {
 //SWLOGD("bibleSync Chat Received: %s", ref.c_str());
-				jmethodID mid = bibleSyncListenerEnv->GetMethodID(cls, "chatReceived",
-				                                                  "(Ljava/lang/String;Ljava/lang/String;)V");
+				jmethodID mid = env->GetMethodID(cls, "chatReceived",
+				                                 "(Ljava/lang/String;Ljava/lang/String;)V");
 				if (mid) {
 //SWLOGD("bibleSync listener mid is available");
-					jstring user = strToUTF8Java(bibleSyncListenerEnv, group.c_str());
-					jstring msg = strToUTF8Java(bibleSyncListenerEnv, alt.c_str());
-					bibleSyncListenerEnv->CallVoidMethod(bibleSyncListener, mid, user, msg);
-					bibleSyncListenerEnv->DeleteLocalRef(user);
-					bibleSyncListenerEnv->DeleteLocalRef(msg);
+					jstring user = strToUTF8Java(env, group.c_str());
+					jstring msg = strToUTF8Java(env, alt.c_str());
+					env->CallVoidMethod(listener, mid, user, msg);
+					env->DeleteLocalRef(user);
+					env->DeleteLocalRef(msg);
 				}
 				break;
 			}
 				// navigation
 			case 'N': {
 //SWLOGD("bibleSync Nav Received: %s", ref.c_str());
-				jmethodID mid = bibleSyncListenerEnv->GetMethodID(cls, "navReceived",
-				                                                  "(Ljava/lang/String;)V");
+				jmethodID mid = env->GetMethodID(cls, "navReceived",
+				                                 "(Ljava/lang/String;)V");
 				if (mid) {
 //SWLOGD("bibleSync listener mid is available");
-					jstring msg = strToUTF8Java(bibleSyncListenerEnv, ref.c_str());
-					bibleSyncListenerEnv->CallVoidMethod(bibleSyncListener, mid, msg);
-					bibleSyncListenerEnv->DeleteLocalRef(msg);
+					jstring msg = strToUTF8Java(env, ref.c_str());
+					env->CallVoidMethod(listener, mid, msg);
+					env->DeleteLocalRef(msg);
 				}
 				break;
 			}
@@ -427,7 +487,7 @@ void bibleSyncCallback(char cmd, string pkt_uuid, string bible, string ref, stri
 				break;
 		}
 //SWLOGD("bibleSync listener deleting local ref to cls");
-		bibleSyncListenerEnv->DeleteLocalRef(cls);
+		env->DeleteLocalRef(cls);
 	}
 }
 #endif
@@ -2498,6 +2558,14 @@ JNIEXPORT void JNICALL Java_org_crosswire_android_sword_SWMgr_sendBibleSyncMessa
 
 #ifdef BIBLESYNC
 	BibleSync_xmit_status result = bibleSync->Transmit(modName.c_str(), osisRef.c_str());
+	// a send the library declined before the socket (a failed sendto it
+	// reports itself): the app hears why, instead of showing the verse as sent
+	if (result != BSP_XMIT_OK) {
+		static const char *why[] = { "ok", "failed", "no socket", "bad message type", "an audience member cannot transmit", "still receiving" };
+		SWBuf info = "BibleSync: Transmit refused: ";
+		info += (result >= 0 && result < 6) ? why[result] : "unknown status";
+		bibleSyncTell('E', info.c_str(), "");
+	}
 #endif
 //SWLOGD("libsword: sendBibleSyncMessage() finished with status code: %d", result);
 
@@ -2538,16 +2606,28 @@ JNIEXPORT void JNICALL Java_org_crosswire_android_sword_SWMgr_startBibleSync
 		sleep(3);
 	}
 
-	bibleSyncListener = bibleSyncListenerMe;
+	// (global: a send on another thread calls back to it too)
+	jobject listener = env->NewGlobalRef(bibleSyncListenerMe);
+	bibleSyncListener = listener;
 	bibleSyncListenerEnv = env;
 //SWLOGD("startBibleSync - calling init");
 
 	if (!bibleSync) {
 //SWLOGD("bibleSync initializing c-tor");
 		bibleSync = new BibleSync(appName.c_str(), SWVersion::currentVersion.getText(), userName.c_str());
+		// nobody resends multicast and Wi-Fi loses some: each verse goes out
+		// more than once, and a peer is not given up for a few lost beacons.
+		// Receive() below is called every 2 seconds: a beacon every 5th call
+		// is one every 10 seconds, as the library intends
+		bibleSync->setBeaconCount(5);
+		bibleSync->setRepeat(bibleSyncRepeatCount, bibleSyncRepeatDelayMS);
+		int lifetime = bibleSyncPeerLifetimeS / 10;
+		bibleSync->setBeaconMultiplier(lifetime > 255 ? 255 : lifetime);
 //SWLOGD("bibleSync initializing setMode");
 		bibleSync->setMode(BSP_MODE_PERSONAL, bibleSyncCallback, passphrase.c_str());
 	}
+	// which interface it is on: the app shows it, so a wrong one is seen
+	if (bibleSync) bibleSyncTell('I', bibleSync->getInterface().c_str(), 0);
 //SWLOGD("startBibleSync - starting while listener");
 	starting = false;
 	while (bibleSyncListener) {
@@ -2558,6 +2638,7 @@ JNIEXPORT void JNICALL Java_org_crosswire_android_sword_SWMgr_startBibleSync
 	}
 	delete bibleSync;
 	bibleSync = nullptr;
+	env->DeleteGlobalRef(listener);
 #else
 //SWLOGD("registerBibleSyncListener: !!! BibleSync disabled in native code.");
 #endif
@@ -2583,6 +2664,42 @@ JNIEXPORT void JNICALL Java_org_crosswire_android_sword_SWMgr_stopBibleSync
 #else
 //SWLOGD("registerBibleSyncListener: !!! BibleSync disabled in native code.");
 #endif
+}
+
+/*
+ * Class:     org_crosswire_android_sword_SWMgr
+ * Method:    setBibleSyncOptions
+ * Signature: (III)V
+ */
+JNIEXPORT void JNICALL Java_org_crosswire_android_sword_SWMgr_setBibleSyncOptions
+		(JNIEnv *env, jobject me, jint repeatCount, jint repeatDelayMS, jint peerLifetimeS) {
+
+	// for the next start; a negative value leaves that one as it is
+	if (repeatCount >= 0) bibleSyncRepeatCount = repeatCount;
+	if (repeatDelayMS >= 0) bibleSyncRepeatDelayMS = repeatDelayMS;
+	if (peerLifetimeS >= 0) bibleSyncPeerLifetimeS = peerLifetimeS;
+}
+
+/*
+ * Class:     org_crosswire_android_sword_SWMgr
+ * Method:    getBibleSyncStatus
+ * Signature: ()Ljava/lang/String;
+ */
+JNIEXPORT jstring JNICALL Java_org_crosswire_android_sword_SWMgr_getBibleSyncStatus
+		(JNIEnv *env, jobject me) {
+
+	SWBuf status = "off";
+#ifdef BIBLESYNC
+	// whether the session a resumed app finds is still worth keeping
+	if (bibleSync && bibleSyncListener) {
+		SWBuf joined = bibleSync->getInterface().c_str();
+		SWBuf now = bibleSync->getCurrentInterface().c_str();
+		if (bibleSync->getMode() == BSP_MODE_DISABLE) status = SWBuf("disabled ") + joined;
+		else if (joined != now) status = SWBuf("moved ") + joined + " " + now;
+		else status = SWBuf("alive ") + joined;
+	}
+#endif
+	return strToUTF8Java(env, status.c_str());
 }
 
 jint JNI_OnLoad(JavaVM *vm, void *reserved) {

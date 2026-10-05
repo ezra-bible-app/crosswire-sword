@@ -613,6 +613,22 @@ void SWDLLEXPORT org_crosswire_sword_SWMgr_stopBibleSync
 
 /*
  * Class:     org_crosswire_android_sword_SWMgr
+ * Method:    setBibleSyncOptions
+ * Signature: (III)V
+ */
+void SWDLLEXPORT org_crosswire_sword_SWMgr_setBibleSyncOptions
+	(SWHANDLE hMgr, int repeatCount, int repeatDelayMS, int peerLifetimeS);
+
+/*
+ * Class:     org_crosswire_android_sword_SWMgr
+ * Method:    getBibleSyncStatus
+ * Signature: ()Ljava/lang/String;
+ */
+const char * SWDLLEXPORT org_crosswire_sword_SWMgr_getBibleSyncStatus
+	(SWHANDLE hMgr);
+
+/*
+ * Class:     org_crosswire_android_sword_SWMgr
  * Method:    sendBibleSyncMessage
  * Signature: (Ljava/lang/String;)V
  */

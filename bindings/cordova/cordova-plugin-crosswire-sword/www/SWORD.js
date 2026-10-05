@@ -381,10 +381,16 @@ SWMgr.prototype.addExtraConfig = function(confBlob, callback) {
 	return retVal;
 }
 
-SWMgr.prototype.startBibleSync = function(appName, userName, passphrase, callback) {
+// options (all optional; the plugin's defaults otherwise):
+//   repeatCount    how many more times each verse is sent, since nobody resends multicast (2)
+//   repeatDelayMS  at least this long between those (500)
+//   peerLifetimeS  a peer not heard from for this many seconds is given up (1800)
+SWMgr.prototype.startBibleSync = function(appName, userName, passphrase, callback, options) {
+	var o = options || {};
+	var opt = function(v) { return (typeof v === 'number' && v >= 0) ? Math.floor(v) : -1; };
 	exec(callback,
 		function(err) { utils.alert('[ERROR] problem: ' + err); },
-		"SWORD", "SWMgr_startBibleSync", [appName, userName, passphrase]
+		"SWORD", "SWMgr_startBibleSync", [appName, userName, passphrase, opt(o.repeatCount), opt(o.repeatDelayMS), opt(o.peerLifetimeS)]
 	);
 }
 
@@ -392,6 +398,16 @@ SWMgr.prototype.stopBibleSync = function() {
 	exec(function() {},
 		function(err) { utils.alert('[ERROR] problem: ' + err); },
 		"SWORD", "SWMgr_stopBibleSync", []
+	);
+}
+
+// whether a running BibleSync session is still worth keeping (after sleep or
+// the background): { state: 'off'|'alive'|'disabled'|'moved', alive, interface,
+// current }; null where the platform cannot say
+SWMgr.prototype.getBibleSyncStatus = function(callback) {
+	exec(callback,
+		function(err) { callback(null); },
+		"SWORD", "SWMgr_getBibleSyncStatus", []
 	);
 }
 

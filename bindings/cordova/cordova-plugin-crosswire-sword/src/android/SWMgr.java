@@ -164,9 +164,32 @@ public class SWMgr {
 	public static interface BibleSyncListener {
 		public void navReceived(String osisRef);
 		public void chatReceived(String user, String message);
+		/** the interface address BibleSync is on */
+		public void infoReceived(String iface);
+		/**
+		 * @param state 'A' a peer announced itself, 'S' it is a speaker we now listen to, 'D' a speaker went quiet
+		 * @param who user @ address ('D': the uuid)
+		 * @param what app version; device; uuid ('D': empty)
+		 */
+		public void peerReceived(char state, String who, String what);
+		/** the library could not send, or stopped itself: what it said, and its detail */
+		public void errorReceived(String message, String detail);
 	}
 	public native void        startBibleSync(String appName, String userName, String passphrase, BibleSyncListener listener);
+	/**
+	 * For the next startBibleSync; a negative value leaves that one as it is.
+	 * @param repeatCount how many more times each verse is sent (nobody resends multicast); default 2
+	 * @param repeatDelayMS at least this long between those; default 500
+	 * @param peerLifetimeS a peer not heard from for this many seconds is given up; default 1800
+	 */
+	public native void        setBibleSyncOptions(int repeatCount, int repeatDelayMS, int peerLifetimeS);
 	public native void        stopBibleSync();
+	/**
+	 * @return "off" (not running), "alive <address>",
+	 * "disabled <address>" (the library shut itself down) or
+	 * "moved <address> <address now>" (the network changed under it)
+	 */
+	public native String      getBibleSyncStatus();
 	public native void        sendBibleSyncMessage(String osisRef);
 }
 
