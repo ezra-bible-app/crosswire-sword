@@ -20,6 +20,13 @@
 -->
 # Release Notes
 
+### 0.2.12 (Oct 5, 2026)
+* BibleSync on a network that loses packets, as Wi-Fi does: each verse carries a sequence number and is sent three times, which a receiver shows once; a peer is kept through half an hour of silence, not one minute; a newcomer is answered at once, twice; a beacon every 10 seconds (biblesync 2.2.0 with pull requests 19 and 20)
+* startBibleSync takes options { repeatCount, repeatDelayMS, peerLifetimeS }; the defaults are 2, 500 and 1800
+* getBibleSyncStatus says whether a running session is still alive on the same network interface (off, alive, disabled, moved), so an app resumed from sleep or the background restarts BibleSync only when it must
+* The page hears BibleSync's interface, its peers and its errors on both platforms ({ cmd: info | peer | error }); a beacon that cannot be sent while the phone sleeps no longer ends the session
+* iOS: BibleSync is offered (features.bibleSync), the app carrying Apple's multicast entitlement; every received message had been dropped
+
 ### 0.2.11 (Oct 1, 2026)
 * Study data (bookmarks and, in time, notes) in a folder of the user's choosing, named sword-studydata so several devices and SWORD apps can share it (doc/bookmarks-format.md in Bishop): a picked folder holding bookmarks/, or itself named sword-studydata, is used as it is, otherwise sword-studydata/ is made inside it
 * iOS: the study-data folder may be in iCloud Drive or any app's folder; where a provider grants files but no folder (Google Drive), the bookmark files are picked in place (SWMgr_chooseDataFiles) or Bishop's own are saved there and opened once (SWMgr_exportDataFiles); a provider's file is rewritten in place so it keeps its identity
