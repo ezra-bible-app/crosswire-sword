@@ -1210,6 +1210,12 @@ debugPrint("initMgr, mgr: " + String(describing: mgr))
         let appName = command.arguments[0] as? String ?? ""
         let userName = command.arguments[1] as? String ?? ""
         let passphrase = command.arguments[2] as? String ?? ""
+        // optional: how often a verse is repeated and how far apart, and how long
+        // a silent peer is kept (-1 or absent = the library's default)
+        let opt = { (i: Int) -> Int32 in
+            command.arguments.count > i ? Int32(truncatingIfNeeded: (command.arguments[i] as? Int) ?? -1) : -1
+        }
+        org_crosswire_sword_SWMgr_setBibleSyncOptions(mgr, opt(3), opt(4), opt(5))
             bibleSyncCallbackID = command.callbackId
             DispatchQueue.global().async {
                 mySWORDPlugin = self
@@ -1282,6 +1288,21 @@ debugPrint("initMgr, mgr: " + String(describing: mgr))
             self.commandDelegate!.send(result, callbackId: command.callbackId)
     }
     
+    // "off" | "alive <addr>" | "disabled <addr>" | "moved <addr> <addr now>", as
+    // { state, alive, interface, current }: the page asks before restarting on resume
+    @objc(SWMgr_getBibleSyncStatus:)
+    func SWMgr_getBibleSyncStatus(command: CDVInvokedUrlCommand) {
+        initMgr()
+        let status = String(cString: org_crosswire_sword_SWMgr_getBibleSyncStatus(mgr))
+        let parts = status.split(separator: " ").map { String($0) }
+        var retVal = [String:Any]()
+        retVal["state"]     = parts.count > 0 ? parts[0] : "off"
+        retVal["alive"]     = parts.count > 0 && parts[0] == "alive"
+        retVal["interface"] = parts.count > 1 ? parts[1] : ""
+        retVal["current"]   = parts.count > 2 ? parts[2] : (parts.count > 1 ? parts[1] : "")
+        self.commandDelegate!.send(CDVPluginResult(status: CDVCommandStatus_OK, messageAs: retVal), callbackId: command.callbackId)
+    }
+
     @objc(SWMgr_stopBibleSync:)
     func SWMgr_stopBibleSync(command: CDVInvokedUrlCommand) {
         initMgr()
