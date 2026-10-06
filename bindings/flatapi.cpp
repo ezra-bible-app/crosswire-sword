@@ -42,6 +42,7 @@
 
 #ifdef BIBLESYNC
 #include <biblesync.hh>
+#include <mutex>
 #endif
 
 #include "corba/orbitcpp/webmgr.hpp"
@@ -119,6 +120,12 @@ void percentUpdate(char percent, void *userData) {
 using std::string;
 BibleSync *bibleSync = 0;
 org_biblesync_MessageReceivedCallback bibleSyncListener = 0;
+#ifdef BIBLESYNC
+// the library keeps no lock of its own; its receive loop runs on a thread
+// of ours while the page's sends and questions arrive on another, so every
+// call into it holds this
+std::mutex bibleSyncMutex;
+#endif
 // what the app may set before a start (setBibleSyncOptions)
 int bibleSyncRepeatCount = 2;		// each verse goes out this many more times
 int bibleSyncRepeatDelayMS = 500;	// at least this far apart
@@ -1871,7 +1878,12 @@ SWLOGD("libsword: sendBibleSyncMessage() bibleSync not active; message not sent.
 	const char *modNamePrefix = osisRef.stripPrefix(':');
 	if (modNamePrefix) modName = modNamePrefix;
 
-	BibleSync_xmit_status result = bibleSync->Transmit(modName.c_str(), osisRef.c_str());
+	BibleSync_xmit_status result;
+	{
+		std::lock_guard<std::mutex> hold(bibleSyncMutex);
+		if (!bibleSync) return;
+		result = bibleSync->Transmit(modName.c_str(), osisRef.c_str());
+	}
 SWLOGD("libsword: sendBibleSyncMessage() finished with status code: %d", result);
 	// a send the library declined before the socket (a failed sendto it
 	// reports itself): the app hears why, instead of showing the verse as sent
@@ -1918,6 +1930,7 @@ SWLOGD("startBibleSync() sleeping 3 seconds");
 	bibleSyncListener = callback;
 SWLOGD("startBibleSync - calling init");
 
+	std::unique_lock<std::mutex> hold(bibleSyncMutex);
 	if (!bibleSync) {
 SWLOGD("bibleSync initializing c-tor");
 		bibleSync = new BibleSync(appName.c_str(), (const char *)SWVersion().currentVersion, userName.c_str());
@@ -1945,14 +1958,20 @@ SWLOGD("bibleSync initializing setMode");
 	}
 SWLOGD("startBibleSync - starting while listener");
 	starting = false;
+	hold.unlock();
 	while(bibleSyncListener) {
 SWLOGD("bibleSyncListener - while loop iteration");
-		BibleSync::Receive(bibleSync);
+		{
+			std::lock_guard<std::mutex> hold(bibleSyncMutex);
+			BibleSync::Receive(bibleSync);
+		}
 SWLOGD("bibleSyncListener - sleeping for 2 seconds");
 		sleep(2);
 	}
+	hold.lock();
 	delete bibleSync;
 	bibleSync = 0;
+	hold.unlock();
 #else
 SWLOGD("registerBibleSyncListener: !!! BibleSync disabled in native code.");
 #endif
@@ -1996,6 +2015,7 @@ const char * SWDLLEXPORT org_crosswire_sword_SWMgr_getBibleSyncStatus
 	status = "off";
 #if defined(BIBLESYNC) && defined(BSP_REPEAT_MAX)
 	// whether the session a resumed app finds is still worth keeping
+	std::lock_guard<std::mutex> hold(bibleSyncMutex);
 	// (a libbiblesync older than its sync repeats cannot say: "off")
 	if (bibleSync && ::bibleSyncListener) {
 		SWBuf joined = bibleSync->getInterface().c_str();
@@ -2022,6 +2042,7 @@ SWLOGD("stopBibleSync()");
 	// if we have a listen loop going, just break the loop; the bibleSync cleanup will happen there
 	if (::bibleSyncListener) ::bibleSyncListener = 0;
 	else if (bibleSync) {
+		std::lock_guard<std::mutex> hold(bibleSyncMutex);
 		delete bibleSync;
 		bibleSync = 0;
 	}

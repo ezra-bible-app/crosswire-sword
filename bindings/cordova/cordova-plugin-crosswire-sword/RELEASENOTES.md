@@ -20,6 +20,10 @@
 -->
 # Release Notes
 
+### 0.2.13 (Oct 6, 2026)
+* BibleSync: every call into the library is made under one lock, on both platforms. Its receive loop runs on a thread of the plugin's while the page's sends and questions arrive on Cordova's, and the library keeps no lock of its own; a verse sent as a packet was being received could be refused as "still receiving", or worse
+* iOS: the engine header the Swift bridge compiles against is refreshed whenever the package is built
+
 ### 0.2.12 (Oct 5, 2026)
 * BibleSync on a network that loses packets, as Wi-Fi does: each verse carries a sequence number and is sent three times, which a receiver shows once; a peer is kept through half an hour of silence, not one minute; a newcomer is answered at once, twice; a beacon every 10 seconds (biblesync 2.2.0 with pull requests 19 and 20)
 * startBibleSync takes options { repeatCount, repeatDelayMS, peerLifetimeS }; the defaults are 2, 500 and 1800

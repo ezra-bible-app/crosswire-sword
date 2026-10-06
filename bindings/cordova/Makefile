@@ -15,7 +15,9 @@ clean:
 	rm cordova-plugin-crosswire-sword/src/android/AndroidMgr.java cordova-plugin-crosswire-sword/src/android/InstallMgr.java cordova-plugin-crosswire-sword/src/android/SWMgr.java cordova-plugin-crosswire-sword/src/android/SWModule.java
 	rm cordova-plugin-crosswire-sword/src/ios/defs.h cordova-plugin-crosswire-sword/src/ios/flatapi.h
 
-publish:
+# (srcdeps first: src/ios/flatapi.h and defs.h are copies, not in git; 0.2.12
+# went out with a stale flatapi.h and could not be built for iOS)
+publish: srcdeps
 	npm publish cordova-plugin-crosswire-sword/
 
 publishlogin:

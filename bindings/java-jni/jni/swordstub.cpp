@@ -92,7 +92,10 @@ namespace {
     int bibleSyncRepeatCount = 2;		// each verse goes out this many more times
     int bibleSyncRepeatDelayMS = 500;	// at least this far apart
     int bibleSyncPeerLifetimeS = 1800;	// a silent peer is given up after this long
-    JNIEnv *bibleSyncListenerEnv = nullptr;
+    // the library keeps no lock of its own; its receive loop runs on a thread
+    // of ours while the page's sends and questions arrive on another, so every
+    // call into it holds this
+    std::mutex bibleSyncMutex;
 #endif
     SWBuf STORAGE_BASE;
     bool sharedStorage = false;	// a SharedStorageFileOps is installed; SHARED_STORAGE_PATH is live
@@ -2557,7 +2560,12 @@ JNIEXPORT void JNICALL Java_org_crosswire_android_sword_SWMgr_sendBibleSyncMessa
 	if (modNamePrefix) modName = modNamePrefix;
 
 #ifdef BIBLESYNC
-	BibleSync_xmit_status result = bibleSync->Transmit(modName.c_str(), osisRef.c_str());
+	BibleSync_xmit_status result;
+	{
+		std::lock_guard<std::mutex> hold(bibleSyncMutex);
+		if (!bibleSync) return;
+		result = bibleSync->Transmit(modName.c_str(), osisRef.c_str());
+	}
 	// a send the library declined before the socket (a failed sendto it
 	// reports itself): the app hears why, instead of showing the verse as sent
 	if (result != BSP_XMIT_OK) {
@@ -2609,9 +2617,9 @@ JNIEXPORT void JNICALL Java_org_crosswire_android_sword_SWMgr_startBibleSync
 	// (global: a send on another thread calls back to it too)
 	jobject listener = env->NewGlobalRef(bibleSyncListenerMe);
 	bibleSyncListener = listener;
-	bibleSyncListenerEnv = env;
 //SWLOGD("startBibleSync - calling init");
 
+	std::unique_lock<std::mutex> hold(bibleSyncMutex);
 	if (!bibleSync) {
 //SWLOGD("bibleSync initializing c-tor");
 		bibleSync = new BibleSync(appName.c_str(), SWVersion::currentVersion.getText(), userName.c_str());
@@ -2630,14 +2638,20 @@ JNIEXPORT void JNICALL Java_org_crosswire_android_sword_SWMgr_startBibleSync
 	if (bibleSync) bibleSyncTell('I', bibleSync->getInterface().c_str(), 0);
 //SWLOGD("startBibleSync - starting while listener");
 	starting = false;
+	hold.unlock();
 	while (bibleSyncListener) {
 //SWLOGD("bibleSyncListener - while loop iteration");
-		BibleSync::Receive(bibleSync);
+		{
+			std::lock_guard<std::mutex> hold(bibleSyncMutex);
+			BibleSync::Receive(bibleSync);
+		}
 //SWLOGD("bibleSyncListener - sleeping for 2 seconds");
 		sleep(2);
 	}
+	hold.lock();
 	delete bibleSync;
 	bibleSync = nullptr;
+	hold.unlock();
 	env->DeleteGlobalRef(listener);
 #else
 //SWLOGD("registerBibleSyncListener: !!! BibleSync disabled in native code.");
@@ -2658,6 +2672,7 @@ JNIEXPORT void JNICALL Java_org_crosswire_android_sword_SWMgr_stopBibleSync
 	// if we have a listen loop going, just break the loop; the bibleSync cleanup will happen there
 	if (bibleSyncListener) bibleSyncListener = nullptr;
 	else if (bibleSync) {
+		std::lock_guard<std::mutex> hold(bibleSyncMutex);
 		delete bibleSync;
 		bibleSync = nullptr;
 	}
@@ -2691,6 +2706,7 @@ JNIEXPORT jstring JNICALL Java_org_crosswire_android_sword_SWMgr_getBibleSyncSta
 	SWBuf status = "off";
 #ifdef BIBLESYNC
 	// whether the session a resumed app finds is still worth keeping
+	std::lock_guard<std::mutex> hold(bibleSyncMutex);
 	if (bibleSync && bibleSyncListener) {
 		SWBuf joined = bibleSync->getInterface().c_str();
 		SWBuf now = bibleSync->getCurrentInterface().c_str();

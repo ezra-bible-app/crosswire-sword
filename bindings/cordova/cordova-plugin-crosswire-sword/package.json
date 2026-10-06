@@ -1,7 +1,10 @@
 {
   "name": "cordova-plugin-crosswire-sword",
-  "version": "0.2.12",
+  "version": "0.2.13",
   "description": "The SWORD Project Plugin",
+  "scripts": {
+    "prepack": "cp ../../../include/defs.h ../../../include/flatapi.h src/ios/"
+  },
   "files": [
     "plugin.xml",
     "libs",
