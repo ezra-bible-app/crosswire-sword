@@ -20,6 +20,9 @@
 -->
 # Release Notes
 
+### 0.2.14 (Oct 11, 2026)
+* Engine: the mods.d cache (modules-conf.cache) records the list of .conf files it was built from, with each one's size and time, and is rebuilt whenever that list differs from the directory, whatever the times say. A library filled by a copy that kept old dates (an app's bundled modules on first run, a module dropped in from a file manager or a sync) was trusted as empty or stale for good; iOS first runs showed no modules. A cache written by an earlier engine has no list and is rebuilt once
+
 ### 0.2.13 (Oct 6, 2026)
 * BibleSync: every call into the library is made under one lock, on both platforms. Its receive loop runs on a thread of the plugin's while the page's sends and questions arrive on Cordova's, and the library keeps no lock of its own; a verse sent as a packet was being received could be refused as "still receiving", or worse
 * iOS: the engine header the Swift bridge compiles against is refreshed whenever the package is built
