@@ -30,6 +30,7 @@
 #endif
 #include <dirent.h>
 
+#include <set>
 #include <swmgr.h>
 #include <rawtext.h>
 #include <rawtext4.h>
@@ -755,8 +756,25 @@ void SWMgr::loadConfigDir(const char *ipath, bool skipCache)
 	skipCache = skipCache || !FileMgr::existsFile(newModFile.c_str());
 
 	// one listing serves both the staleness check and the rebuild; asking
-	// for isDirectory lets a FileOps fill in modTime at the same time
-	std::vector<DirEntry> dirList = FileMgr::getDirList(ipath, false, true);
+	// for size and isDirectory lets a FileOps fill in modTime at the same time
+	std::vector<DirEntry> dirList = FileMgr::getDirList(ipath, true, true);
+
+	// the .conf files the directory holds now, each as one line of name,
+	// size and time.  The cache carries the list it was built from, in a
+	// section of its own (never a module's name); a cache whose list differs
+	// is stale however the times compare: a .conf copied in with an old
+	// date, a provider which reports no times, or a change within the second
+	// of the cache's own write all look current by time alone
+	static const char *cacheListSection = ".cache";
+	std::set<SWBuf> confList;
+	for (unsigned int i = 0; i < dirList.size(); ++i) {
+		if (!dirList[i].name.endsWith(".conf")) continue;
+		if (!dirList[i].modTime)	// 0 = the FileOps didn't know
+			dirList[i].modTime = FileMgr::getFileModTime((basePath + dirList[i].name).c_str());
+		SWBuf line;
+		line.setFormatted("%s|%lu|%ld", dirList[i].name.c_str(), dirList[i].size, dirList[i].modTime);
+		confList.insert(line);
+	}
 
 	// The cache is only a speedup; it is always safe to throw it away.
 	// If anything in mods.d looks newer than the cache (a .conf added,
@@ -767,21 +785,40 @@ void SWMgr::loadConfigDir(const char *ipath, bool skipCache)
 		else {
 			for (unsigned int i = 0; i < dirList.size() && !skipCache; ++i) {
 				if (!dirList[i].name.endsWith(".conf")) continue;
-				long modTime = dirList[i].modTime;	// 0 = the FileOps didn't know
-				if (!modTime) modTime = FileMgr::getFileModTime((basePath + dirList[i].name).c_str());
-				if (modTime > cacheTime) skipCache = true;
+				if (dirList[i].modTime > cacheTime) skipCache = true;
 			}
+		}
+	}
+
+	SWConfig *pathConfig = 0;
+
+	// the times passed: the cache is trusted only if the list it carries
+	// is the directory's list (a cache from before the list was kept has
+	// none, and is rebuilt once)
+	if (!skipCache) {
+		pathConfig = new SWConfig(newModFile);
+		SectionMap::iterator cached = pathConfig->getSections().find(cacheListSection);
+		if (cached == pathConfig->getSections().end()) skipCache = true;
+		else {
+			std::set<SWBuf> cachedList;
+			for (ConfigEntMap::iterator it = cached->second.begin(); it != cached->second.end(); ++it) {
+				if (it->first == "Conf") cachedList.insert(it->second);
+			}
+			if (cachedList != confList) skipCache = true;
+			pathConfig->getSections().erase(cached);
+		}
+		if (skipCache) {
+			SWLOGTI("mods.d cache %s does not match the directory's .conf files; rebuilding", newModFile.c_str());
+			delete pathConfig;
+			pathConfig = 0;
 		}
 	}
 
 	if (skipCache) {
 		// assure any cache file is removed
 		FileMgr::removeFile(newModFile.c_str());
-	}
+		pathConfig = new SWConfig(newModFile);
 
-	SWConfig *pathConfig = new SWConfig(newModFile);
-
-	if (skipCache) {
 		for (unsigned int i = 0; i < dirList.size(); ++i) {
 			//check whether it ends with .conf, if it doesn't skip it!
 			if (!dirList[i].name.endsWith(".conf")) {
@@ -793,7 +830,14 @@ void SWMgr::loadConfigDir(const char *ipath, bool skipCache)
 			pathConfig->augment(tmpConfig);
 		}
 
+		// the list this cache was built from, saved with it and then dropped
+		// from what the modules are read from
+		ConfigEntMap &list = (*pathConfig)[cacheListSection];
+		for (std::set<SWBuf>::iterator it = confList.begin(); it != confList.end(); ++it) {
+			list.insert(ConfigEntMap::value_type("Conf", *it));
+		}
 		pathConfig->save();
+		pathConfig->getSections().erase(cacheListSection);
 	}
 
 	if (config) {

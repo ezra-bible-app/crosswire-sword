@@ -41,6 +41,21 @@ Installed Modules:
 	1 modules
 	[GBSReference] InstallSourceID=20081216195754 InstallSourceCaption=CrossWire
 
+== a .conf copied in with an old date, the directory's date held back, is still seen (the cache's file list)
+Installed Modules:
+	[GBSReference] (1.7) - GBS Reference Test Module
+	[GBSSecond] (2.1) - Second Test Module
+	2 modules
+	[GBSReference] InstallSourceID=20081216195754 InstallSourceCaption=CrossWire
+	[GBSSecond] InstallSourceID= InstallSourceCaption=
+
+== a cache from before the file list was kept is rebuilt once
+Installed Modules:
+	[GBSReference] (1.7) - GBS Reference Test Module
+	1 modules
+	[GBSReference] InstallSourceID=20081216195754 InstallSourceCaption=CrossWire
+1
+
 == removing the cache by hand is always safe
 Installed Modules:
 	[GBSReference] (1.7) - GBS Reference Test Module

@@ -68,6 +68,23 @@ echo "== a .conf removed by someone else is gone"
 rm $DESTMODSD/gbssecond.conf
 im -l
 
+sleep 2
+echo
+echo "== a .conf copied in with an old date, the directory's date held back, is still seen (the cache's file list)"
+cp -p $IMREPO/mods.d/gbssecond.conf $DESTMODSD/
+touch -r $DESTMODSD/modules-conf.cache $DESTMODSD
+im -l
+rm $DESTMODSD/gbssecond.conf
+im -l > /dev/null
+
+echo
+echo "== a cache from before the file list was kept is rebuilt once"
+grep -v '^Conf=' $DESTMODSD/modules-conf.cache | grep -v '^\[\.cache\]' > $DESTMODSD/modules-conf.cache.old
+mv $DESTMODSD/modules-conf.cache.old $DESTMODSD/modules-conf.cache
+touch -r $DESTMODSD/gbsreference.conf $DESTMODSD/modules-conf.cache $DESTMODSD
+im -l
+grep -c '^Conf=' $DESTMODSD/modules-conf.cache
+
 echo
 echo "== removing the cache by hand is always safe"
 rm $DESTMODSD/modules-conf.cache
