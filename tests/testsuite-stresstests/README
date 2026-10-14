@@ -1,0 +1,24 @@
+Stress tests: slow, optional, and run under valgrind, so they are not part
+of the regular suite in ../testsuite.  They work the same way: a <test>.sh
+and <test>.good pair, ./runtest.sh <test> to run one and diff its output
+against the .good, ./runall.sh for all of them.  Build the library and the
+programs in .. first (make, or the tests target of the cmake build).
+
+Each .sh builds its fixture modules under tmp/<test>/ from the import files
+in ../testsuite, runs a program from .. in a loop under valgrind with full
+leak checking, and prints what the program answered followed by valgrind's
+leak and error summary with the process id stripped.  So a test fails on a
+wrong answer, on a definite leak, or on any memory error (--error-exitcode
+makes the exit code part of the output).
+
+flatapi	the flat C API (bindings/flatapi.cpp, what the Swift and other
+	non-C++ bindings call): every entry point short of InstallMgr and
+	BibleSync, handles made, used and freed over and over, by
+	../flatapitest.  A count argument to flatapitest sets how often;
+	the output does not depend on it.
+
+To add a test, write it as in ../testsuite and make its .good with:
+
+	./mytest.sh > mytest.good
+
+after checking the output by hand.

@@ -17,6 +17,7 @@ SET(test_PROGRAMS
 	httptest
 	installmgrtest
 	fileopstest
+	flatapitest
 	introtest
 	indextest
 	keycast

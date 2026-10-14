@@ -13,7 +13,7 @@ noinst_PROGRAMS = utf8norm ciphertest keytest mgrtest parsekey versekeytest \
 			configtest keycast romantest testblocks filtertest \
 			rawldidxtest lextest swaptest swbuftest xmltest \
 			webiftest striptest ldtest osistest bibliotest installmgrtest \
-			fileopstest
+			fileopstest flatapitest
 
 if WITHCURL
 noinst_PROGRAMS += httptest
@@ -82,4 +82,5 @@ bibliotest_SOURCES = bibliotest.cpp
 httptest_SOURCES = httptest.cpp
 installmgrtest_SOURCES = installmgrtest.cpp
 fileopstest_SOURCES = fileopstest.cpp
+flatapitest_SOURCES = flatapitest.cpp
 

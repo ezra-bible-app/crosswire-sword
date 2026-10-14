@@ -1,0 +1,89 @@
+-- managers
+GBS (Generic Books, en, v1.0)
+RawLD (Lexicons / Dictionaries, en, v1.0)
+RawText (Biblical Texts, en, v1.0)
+zLD (Lexicons / Dictionaries, en, v1.0)
+zText (Biblical Texts, en, v1.0)
+-- modules
+-- zText: flat API zText, Biblical Texts, driver zText
+key Genesis 1:3, entry size -1
+strip: Text of verse 3.  [ <a class="" href="passagestudy.jsp?action=showRef&type=scripRef&value=2Cor.4.6&module=">2 Cor 4:6</a> ] 
+raw: Text of verse 3. <note n="a" osisID="Gen.1.3!crossReference.a" osisRef="Gen.1.3" type="crossReference"> <reference osisRef="2Cor.4.6">2 Cor 4:6</reference> </note>
+begin Genesis 1:1, next next previous Genesis 1:2
+parseKeyList: [Gen.1.1] [Gen.1.2] [Gen.1.3] [Gen.1.5]
+entry attribute types: [Footnote]
+footnote 1 body raw: [ <reference osisRef="2Cor.4.6">2 Cor 4:6</reference> ]
+footnote 1 body rendered: [ <a class="" href="passagestudy.jsp?action=showRef&type=scripRef&value=2Cor.4.6&module=">2 Cor 4:6</a> ]
+footnote names: [1]
+search 'God': 7 hits, progress reported yes, Gen 1:1, Gen 1:4, Ps 3:2
+key handle text Genesis 1:3, module key text Genesis 1:3
+clone after begin+next: Genesis 1:2
+-- RawText: flat API RawText, Biblical Texts, driver RawText
+key Genesis 1:3, entry size -1
+strip: Text of verse 3.  [ <a class="" href="passagestudy.jsp?action=showRef&type=scripRef&value=2Cor.4.6&module=">2 Cor 4:6</a> ] 
+raw: Text of verse 3. <note n="a" osisID="Gen.1.3!crossReference.a" osisRef="Gen.1.3" type="crossReference"> <reference osisRef="2Cor.4.6">2 Cor 4:6</reference> </note>
+begin Genesis 1:1, next next previous Genesis 1:2
+parseKeyList: [Gen.1.1] [Gen.1.2] [Gen.1.3] [Gen.1.5]
+entry attribute types: [Footnote]
+footnote 1 body raw: [ <reference osisRef="2Cor.4.6">2 Cor 4:6</reference> ]
+footnote 1 body rendered: [ <a class="" href="passagestudy.jsp?action=showRef&type=scripRef&value=2Cor.4.6&module=">2 Cor 4:6</a> ]
+footnote names: [1]
+search 'God': 7 hits, progress reported yes, Gen 1:1, Gen 1:4, Ps 3:2
+key handle text Genesis 1:3, module key text Genesis 1:3
+clone after begin+next: Genesis 1:2
+-- RawLD: flat API RawLD, Lexicons / Dictionaries, driver RawLD
+key , entry size -1
+strip: Body of 2
+raw: Body of 2
+begin 00001, next next previous 00002
+parseKeyList: [Gen.1.1-3; Gen.1.5]
+entry attribute types:
+footnote 1 body raw:
+footnote 1 body rendered:
+footnote names:
+search '0': 0 hits, progress reported yes
+key handle text 0002, module key text 00006
+clone after begin+next: 0002
+-- zLD: flat API zLD, Lexicons / Dictionaries, driver zLD
+key , entry size -1
+strip: Body of 2
+raw: Body of 2
+begin 00001, next next previous 00002
+parseKeyList: [Gen.1.1-3; Gen.1.5]
+entry attribute types:
+footnote 1 body raw:
+footnote 1 body rendered:
+footnote names:
+search '0': 0 hits, progress reported yes
+key handle text 0002, module key text 00006
+clone after begin+next: 0002
+-- GBS: flat API GBS, Generic Books, driver RawGenBook
+key /Chapter 6/Section 2, entry size -1
+strip: Text of section 2 in chapter 6.
+raw: Text of section 2 in chapter 6.
+begin , next next previous /Chapter 1
+parseKeyList: [Gen.1.1-3; Gen.1.5]
+entry attribute types:
+footnote 1 body raw:
+footnote 1 body rendered:
+footnote names:
+search 'Section': 0 hits, progress reported yes
+key handle text /Chapter 6/Section 2, module key text /Chapter 6/Section 2
+clone after begin+next: /Chapter 1
+-- keys
+intro key: John 1:0
+steps: Genesis 2:0
+verse key children: [1] [1] [2] [0] [50] [25] [Genesis] [Gen.2] [Gen 2:0] [Gen] [Gen] []
+tree children of /Chapter 6: [Section 1] [Section 2] [Section 3]
+parent of /Chapter 6/Section 2: /Chapter 6, clone now at /Chapter 6, module still at /Chapter 6
+tree children at the root: [Chapter 1] [Chapter 2] [Chapter 3] [Chapter 4] [Chapter 5] [Chapter 6] [Chapter 7] [Chapter 8]
+-- config
+sections: [One] [Two] [_ConfComments] [_ConfOrder]
+keys of One: [a] [b]
+One/a = one, Two/c = 3, missing = (null)
+augment answered: [One] [Three] [_ConfOrder]
+sections after augment: [One] [Three] [Two] [_ConfComments] [_ConfOrder]
+One/b = two, Three/d = 4
+all checks passed (0 failures)
+flatapitest exit code: 0
+flatapitest: an error line
