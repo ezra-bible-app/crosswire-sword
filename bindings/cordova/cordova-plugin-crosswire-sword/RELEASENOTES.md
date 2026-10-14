@@ -20,6 +20,10 @@
 -->
 # Release Notes
 
+### 0.2.15 (Oct 14, 2026)
+* getBookNames no longer leaves the module's key at Revelation: on Android the walk goes on a clone of the module's key (engine: SWKey in the flat API and JNI); on iOS the walk still goes on the module's own key, which it now puts back after, until an iOS engine build with the SWKey API ships (the bundled xcframework is still the 0.2.14 one). A chapter asked while the book list was being read rendered Revelation 22 under the asked reference
+* Engine: a search started without a progress callback crashed; RawStr (rawtext/rawld) overwrites leaked their link buffer; TreeKeyIdx user data freed with the wrong delete
+
 ### 0.2.14 (Oct 11, 2026)
 * Engine: the mods.d cache (modules-conf.cache) records the list of .conf files it was built from, with each one's size and time, and is rebuilt whenever that list differs from the directory, whatever the times say. A library filled by a copy that kept old dates (an app's bundled modules on first run, a module dropped in from a file manager or a sync) was trusted as empty or stale for good; iOS first runs showed no modules. A cache written by an earlier engine has no list and is rebuilt once
 
