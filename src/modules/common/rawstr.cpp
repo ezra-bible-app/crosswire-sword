@@ -402,6 +402,7 @@ void RawStr::doSetText(const char *ikey, const char *buf, long len)
 	}
 	else if ((!strcmp(key, dbKey)) && (len>0 /*we're not deleting*/)) { // got absolute entry
 		do {
+			delete [] tmpbuf;	// the entry read last time round, a link
 			tmpbuf = new char [ size + 2 ];
 			memset(tmpbuf, 0, size + 2);
 			datfd->seek(start, SEEK_SET);
@@ -429,6 +430,8 @@ void RawStr::doSetText(const char *ikey, const char *buf, long len)
 		}
 		while (true);	// while we're resolving links
 	}
+	delete [] tmpbuf;
+	tmpbuf = 0;
 
 	endoff = (SW_u32)idxfd->seek(0, SEEK_END);
 
