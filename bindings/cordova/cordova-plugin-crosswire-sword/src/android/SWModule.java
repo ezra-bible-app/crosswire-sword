@@ -80,14 +80,26 @@ public class SWModule {
 	public native char          setKeyText(String key);
 
 	public native String        getKeyText();
-	public native boolean       hasKeyChildren();
+
+	/**
+	 * The module's current key.  It belongs to the module (no dispose) and
+	 * is good until the module's key is next set, which replaces the key
+	 * object.  clone() it for a key of your own.
+	 */
+	public SWKey                getKey() {
+		long h = nativeGetKey();
+		return (h != 0) ? new SWKey(h, false) : null;
+	}
+	private native long         nativeGetKey();
+
+	public boolean              hasKeyChildren()	{ SWKey k = getKey(); return (k != null) && k.hasChildren(); }
 
 	// This method returns child nodes for a genbook,
 	// but has special handling if called on a VerseKey module:
 	//  [0..] [VERSEKEY_TESTAMENT, VERSEKEY_BOOK, VERSEKEY_CHAPTER, VERSEKEY_VERSE, VERSEKEY_CHAPTERMAX, ... ]
-	public native String[]      getKeyChildren();
+	public String[]             getKeyChildren()	{ SWKey k = getKey(); return (k != null) ? k.getChildren() : new String[0]; }
 
-	public native String        getKeyParent();
+	public String               getKeyParent()	{ SWKey k = getKey(); return (k != null) ? k.getParent() : ""; }
 	public String               getName()		{ return name; }
 	public String               getDescription()	{ return description; }
 	public String               getCategory()	{ return category; }

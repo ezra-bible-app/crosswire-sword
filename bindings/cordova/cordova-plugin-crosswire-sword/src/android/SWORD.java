@@ -40,6 +40,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import org.crosswire.android.sword.SWMgr;
+import org.crosswire.android.sword.SWKey;
 import org.crosswire.android.sword.SafStorage;
 import org.crosswire.android.sword.AndroidMgr;
 import org.crosswire.android.sword.SWModule;
@@ -911,16 +912,24 @@ Log.d(TAG, "SWModule_getRenderChapter");
 		else if (action.equals("SWModule_getBookNames")) {
 			SWModule mod = mgr.getModuleByName(args.getString(0));
 			if (mod == null) { callbackContext.error("couldn't find module: " + args.getString(0)); return true; }
+			// the walk from Genesis to Revelation goes on a clone of the module's
+			// key: the module keeps its place for a chapter render asked meanwhile
+			SWKey key = mod.getKey();
+			SWKey walk = (key != null) ? key.clone() : null;
+			if (walk == null) { callbackContext.error("couldn't clone the key of module: " + args.getString(0)); return true; }
 			JSONArray r = new JSONArray();
-			for (mod.begin(); mod.error() == 0; mod.setKeyText("+book")) {
-				String vkInfo[] = mod.getKeyChildren();
-				JSONObject bookInfo = new JSONObject();
-				bookInfo.put("name",   vkInfo[SWModule.VERSEKEY_BOOKNAME]);
-				bookInfo.put("abbrev", vkInfo[SWModule.VERSEKEY_BOOKABBREV]);
-				bookInfo.put("osisName",    vkInfo[SWModule.VERSEKEY_OSISBOOKNAME]);
-				bookInfo.put("chapterMax", Integer.parseInt(vkInfo[SWModule.VERSEKEY_CHAPTERMAX]));
-				r.put(bookInfo);
+			try {
+				for (walk.begin(); walk.error() == 0; walk.setText("+book")) {
+					String vkInfo[] = walk.getChildren();
+					JSONObject bookInfo = new JSONObject();
+					bookInfo.put("name",   vkInfo[SWModule.VERSEKEY_BOOKNAME]);
+					bookInfo.put("abbrev", vkInfo[SWModule.VERSEKEY_BOOKABBREV]);
+					bookInfo.put("osisName",    vkInfo[SWModule.VERSEKEY_OSISBOOKNAME]);
+					bookInfo.put("chapterMax", Integer.parseInt(vkInfo[SWModule.VERSEKEY_CHAPTERMAX]));
+					r.put(bookInfo);
+				}
 			}
+			finally { walk.dispose(); }
 			callbackContext.success(r);
 		}
 		else if (action.equals("SWModule_parseKeyList")) {

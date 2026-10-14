@@ -32,4 +32,4 @@ javawrapper:
 
 clean:
 	#these are from ../java-jni
-	rm SWORD/app/src/main/java/org/crosswire/android/sword/InstallMgr.java SWORD/app/src/main/java/org/crosswire/android/sword/SWMgr.java SWORD/app/src/main/java/org/crosswire/android/sword/SWModule.java
+	rm SWORD/app/src/main/java/org/crosswire/android/sword/InstallMgr.java SWORD/app/src/main/java/org/crosswire/android/sword/SWMgr.java SWORD/app/src/main/java/org/crosswire/android/sword/SWModule.java SWORD/app/src/main/java/org/crosswire/android/sword/SWKey.java

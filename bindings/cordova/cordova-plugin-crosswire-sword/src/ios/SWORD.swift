@@ -968,18 +968,24 @@ debugPrint("initMgr, mgr: " + String(describing: mgr))
         initMgr()
         let mod = getModule(command: command)
         var retVal = [[AnyHashable : Any]]()
-        org_crosswire_sword_SWModule_begin(mod)
-        while (org_crosswire_sword_SWModule_popError(mod) == 0) {
-            let vkInfo = getStringArray(buffer: org_crosswire_sword_SWModule_getKeyChildren(mod));
-            let bookInfo = [
-                "name": vkInfo[VERSEKEY_BOOKNAME],
-                "abbrev": vkInfo[VERSEKEY_BOOKABBREV],
-                "osisName": vkInfo[VERSEKEY_OSISBOOKNAME],
-                "chapterMax": Int(vkInfo[VERSEKEY_CHAPTERMAX])!,
-            ] as [AnyHashable : Any]
-            retVal.append(bookInfo)
+        // the walk from Genesis to Revelation goes on a clone of the module's
+        // key: the module keeps its place for a chapter render asked meanwhile
+        let key = org_crosswire_sword_SWKey_clone(org_crosswire_sword_SWModule_getKey(mod))
+        if (key != 0) {
+            org_crosswire_sword_SWKey_begin(key)
+            while (org_crosswire_sword_SWKey_popError(key) == 0) {
+                let vkInfo = getStringArray(buffer: org_crosswire_sword_SWKey_getChildren(key));
+                let bookInfo = [
+                    "name": vkInfo[VERSEKEY_BOOKNAME],
+                    "abbrev": vkInfo[VERSEKEY_BOOKABBREV],
+                    "osisName": vkInfo[VERSEKEY_OSISBOOKNAME],
+                    "chapterMax": Int(vkInfo[VERSEKEY_CHAPTERMAX])!,
+                ] as [AnyHashable : Any]
+                retVal.append(bookInfo)
 
-            org_crosswire_sword_SWModule_setKeyText(mod, "+book")
+                org_crosswire_sword_SWKey_setText(key, "+book")
+            }
+            org_crosswire_sword_SWKey_delete(key)
         }
         self.commandDelegate!.send(CDVPluginResult(status: CDVCommandStatus_OK, messageAs: retVal), callbackId: command.callbackId)
     }

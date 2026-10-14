@@ -94,6 +94,110 @@ const int org_crosswire_sword_SWLog_LOG_DEBUG = 5;
 void SWDLLEXPORT org_crosswire_sword_SWModule_terminateSearch
 	(SWHANDLE hSWModule);
 
+/*
+ * SWKey: a key handle, from SWModule_getKey (the module's own key) or
+ * SWKey_clone (a copy of your own).  SWORD's objects are stateful: a walk
+ * which must not move a module goes on a clone of its key.  The SWModule
+ * key functions (setKeyText, getKeyChildren, ...) are these functions
+ * applied to the module's key.
+ */
+
+/*
+ * Class:     org_crosswire_sword_SWKey
+ * Method:    clone
+ * Signature: ()J
+ * A copy of the key (SWKey::clone) the caller owns: SWKey_delete it when
+ * done.  0 on failure.
+ */
+SWHANDLE SWDLLEXPORT org_crosswire_sword_SWKey_clone
+	(SWHANDLE hSWKey);
+
+/*
+ * Class:     org_crosswire_sword_SWKey
+ * Method:    delete
+ * Signature: ()V
+ * Frees a clone; the handle must not be used afterwards.  A module's key
+ * (SWModule_getKey) is left alone.
+ */
+void SWDLLEXPORT org_crosswire_sword_SWKey_delete
+	(SWHANDLE hSWKey);
+
+/*
+ * Class:     org_crosswire_sword_SWKey
+ * Method:    setText
+ * Signature: (Ljava/lang/String;)C
+ * With the SWModule_setKeyText conveniences for a VerseKey ("+book",
+ * "-chapter", "=text").  Returns the key's error for this positioning.
+ */
+char SWDLLEXPORT org_crosswire_sword_SWKey_setText
+	(SWHANDLE hSWKey, const char *keyText);
+
+/*
+ * Class:     org_crosswire_sword_SWKey
+ * Method:    getText
+ * Signature: ()Ljava/lang/String;
+ */
+const char * SWDLLEXPORT org_crosswire_sword_SWKey_getText
+	(SWHANDLE hSWKey);
+
+/*
+ * Class:     org_crosswire_sword_SWKey
+ * Method:    popError
+ * Signature: ()C
+ */
+char SWDLLEXPORT org_crosswire_sword_SWKey_popError
+	(SWHANDLE hSWKey);
+
+/*
+ * Class:     org_crosswire_sword_SWKey
+ * Method:    begin
+ * Signature: ()V
+ */
+void SWDLLEXPORT org_crosswire_sword_SWKey_begin
+	(SWHANDLE hSWKey);
+
+/*
+ * Class:     org_crosswire_sword_SWKey
+ * Method:    next
+ * Signature: ()V
+ */
+void SWDLLEXPORT org_crosswire_sword_SWKey_next
+	(SWHANDLE hSWKey);
+
+/*
+ * Class:     org_crosswire_sword_SWKey
+ * Method:    previous
+ * Signature: ()V
+ */
+void SWDLLEXPORT org_crosswire_sword_SWKey_previous
+	(SWHANDLE hSWKey);
+
+/*
+ * Class:     org_crosswire_sword_SWKey
+ * Method:    hasChildren
+ * Signature: ()Z
+ */
+char SWDLLEXPORT org_crosswire_sword_SWKey_hasChildren
+	(SWHANDLE hSWKey);
+
+/*
+ * Class:     org_crosswire_sword_SWKey
+ * Method:    getChildren
+ * Signature: ()[Ljava/lang/String;
+ * As SWModule_getKeyChildren (its layout for a VerseKey).  The array is
+ * good until the next getChildren on this handle.
+ */
+const char ** SWDLLEXPORT org_crosswire_sword_SWKey_getChildren
+	(SWHANDLE hSWKey);
+
+/*
+ * Class:     org_crosswire_sword_SWKey
+ * Method:    getParent
+ * Signature: ()Ljava/lang/String;
+ */
+const char * SWDLLEXPORT org_crosswire_sword_SWKey_getParent
+	(SWHANDLE hSWKey);
+
 typedef void (*org_crosswire_sword_SWModule_SearchCallback)(int);
 
 typedef void (*org_biblesync_MessageReceivedCallback)(char, const char *, const char *);
@@ -159,6 +263,18 @@ char SWDLLEXPORT org_crosswire_sword_SWModule_setKeyText
  * Signature: ()Ljava/lang/String;
  */
 const char * SWDLLEXPORT org_crosswire_sword_SWModule_getKeyText
+	(SWHANDLE hSWModule);
+
+/*
+ * Class:     org_crosswire_sword_SWModule
+ * Method:    getKey
+ * Signature: ()J
+ * The module's current key, as a handle for the SWKey functions.  It
+ * belongs to the module: never SWKey_delete it, and it is only good until
+ * the module's key is next set (SWModule_setKeyText replaces the key
+ * object).  For a key of your own, SWKey_clone it.
+ */
+SWHANDLE SWDLLEXPORT org_crosswire_sword_SWModule_getKey
 	(SWHANDLE hSWModule);
 
 /*

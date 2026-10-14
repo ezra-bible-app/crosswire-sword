@@ -55,6 +55,7 @@
 
 #include "org_crosswire_android_sword_SWMgr.h"
 #include "org_crosswire_android_sword_SWModule.h"
+#include "org_crosswire_android_sword_SWKey.h"
 #include "org_crosswire_android_sword_InstallMgr.h"
 
 
@@ -1356,6 +1357,37 @@ SWModule *getModule
 	return module;
 }
 
+// the native key behind an SWKey object (a module's own or a clone)
+static SWKey *getKey
+		(JNIEnv *env, jobject me) {
+
+	init(env);
+
+	jclass clazzSWKey = env->FindClass("org/crosswire/android/sword/SWKey");
+	jlong handle = env->GetLongField(me, env->GetFieldID(clazzSWKey, "handle", "J"));
+	return (SWKey *)(intptr_t)handle;
+}
+
+// the VerseKey conveniences of setKeyText: "+book", "-chapter" (a step).
+// True when keyText was one of them, with the key's error for the move in err.
+static bool verseKeyStep(SWKey *key, const char *keyText, char *err) {
+	VerseKey *vkey = SWDYNAMIC_CAST(VerseKey, key);
+	if (!vkey || (*keyText!='+' && *keyText!='-')) return false;
+	if (!stricmp(keyText+1, "book")) {
+		vkey->popError();	// an error left from before is not this move's
+		vkey->setBook((signed char)(vkey->getBook() + ((*keyText=='+')?1:-1)));
+		*err = vkey->getError();
+		return true;
+	}
+	else if (!stricmp(keyText+1, "chapter")) {
+		vkey->popError();
+		vkey->setChapter(vkey->getChapter() + ((*keyText=='+')?1:-1));
+		*err = vkey->getError();
+		return true;
+	}
+	return false;
+}
+
 JNIEXPORT jlong JNICALL Java_org_crosswire_android_sword_SWModule_nativeClone
 		(JNIEnv *env, jobject me) {
 
@@ -1394,26 +1426,9 @@ JNIEXPORT jchar JNICALL Java_org_crosswire_android_sword_SWModule_setKeyText
 	if (module) {
 		const char *keyText = env->GetStringUTFChars(keyTextJS, nullptr);
 //SWLOGD("setKeyText(%s, %s)", module->getName(), keyText);
-		SWKey *key = module->getKey();
-		VerseKey *vkey = SWDYNAMIC_CAST(VerseKey, key);
-		if (vkey && (*keyText=='+' ||*keyText=='-')) {
-			if (!stricmp(keyText+1, "book")) {
-				int newBook = vkey->getBook() + ((*keyText=='+')?1:-1);
-//SWLOGD("setting book to %d", newBook);
-				vkey->popError();	// an error left from before is not this move's
-				vkey->setBook((signed char)newBook);
-				env->ReleaseStringUTFChars(keyTextJS, keyText);
-				return vkey->getError();
-			}
-			else if (!stricmp(keyText+1, "chapter")) {
-				vkey->popError();
-				vkey->setChapter(vkey->getChapter() + ((*keyText=='+')?1:-1));
-				env->ReleaseStringUTFChars(keyTextJS, keyText);
-				return vkey->getError();
-			}
-		}
-
-		error = module->setKey(keyText);
+		char err = 0;
+		if (verseKeyStep(module->getKey(), keyText, &err)) error = err;
+		else error = module->setKey(keyText);
 		env->ReleaseStringUTFChars(keyTextJS, keyText);
 	}
 	return error;
@@ -1709,47 +1724,154 @@ JNIEXPORT jobjectArray JNICALL Java_org_crosswire_android_sword_SWModule_parseKe
 
 /*
  * Class:     org_crosswire_android_sword_SWModule
- * Method:    hasKeyChildren
- * Signature: ()Z
+ * Method:    nativeGetKey
+ * Signature: ()J
  */
-JNIEXPORT jboolean JNICALL Java_org_crosswire_android_sword_SWModule_hasKeyChildren
+JNIEXPORT jlong JNICALL Java_org_crosswire_android_sword_SWModule_nativeGetKey
 		(JNIEnv *env, jobject me) {
 
 	init(env);
 
-
 	SWModule *module = getModule(env, me);
-	jboolean retVal = JNI_FALSE;
+	return (jlong)(intptr_t)(module ? module->getKey() : nullptr);
+}
 
-	if (module) {
-		sword::SWKey *key = module->getKey();
 
-		TreeKeyIdx *tkey = SWDYNAMIC_CAST(TreeKeyIdx, key);
-		if (tkey) {
-			retVal = (tkey->hasChildren())?JNI_TRUE:JNI_FALSE;
-		}
-	}
-	return retVal;
+/*
+ * Class:     org_crosswire_android_sword_SWKey
+ * Method:    nativeClone
+ * Signature: ()J
+ */
+JNIEXPORT jlong JNICALL Java_org_crosswire_android_sword_SWKey_nativeClone
+		(JNIEnv *env, jobject me) {
+
+	SWKey *key = getKey(env, me);
+	return (jlong)(intptr_t)(key ? key->clone() : nullptr);
 }
 
 /*
- * Class:     org_crosswire_android_sword_SWModule
- * Method:    getKeyChildren
- * Signature: ()[Ljava/lang/String;
+ * Class:     org_crosswire_android_sword_SWKey
+ * Method:    nativeDispose
+ * Signature: (J)V
  */
-JNIEXPORT jobjectArray JNICALL Java_org_crosswire_android_sword_SWModule_getKeyChildren
+JNIEXPORT void JNICALL Java_org_crosswire_android_sword_SWKey_nativeDispose
+		(JNIEnv *env, jobject me, jlong handle) {
+
+	delete (SWKey *)(intptr_t)handle;
+}
+
+/*
+ * Class:     org_crosswire_android_sword_SWKey
+ * Method:    setText
+ * Signature: (Ljava/lang/String;)C
+ */
+JNIEXPORT jchar JNICALL Java_org_crosswire_android_sword_SWKey_setText
+		(JNIEnv *env, jobject me, jstring keyTextJS) {
+
+	SWKey *key = getKey(env, me);
+
+	int error = -99;
+	if (key) {
+		const char *keyText = env->GetStringUTFChars(keyTextJS, nullptr);
+		char err = 0;
+		if (verseKeyStep(key, keyText, &err)) error = err;
+		else {
+			key->popError();
+			key->setText(keyText);
+			error = key->getError();
+		}
+		env->ReleaseStringUTFChars(keyTextJS, keyText);
+	}
+	return error;
+}
+
+/*
+ * Class:     org_crosswire_android_sword_SWKey
+ * Method:    getText
+ * Signature: ()Ljava/lang/String;
+ */
+JNIEXPORT jstring JNICALL Java_org_crosswire_android_sword_SWKey_getText
 		(JNIEnv *env, jobject me) {
 
-	init(env);
+	SWKey *key = getKey(env, me);
+	return key ? strToUTF8Java(env, key->getText()) : nullptr;
+}
 
+/*
+ * Class:     org_crosswire_android_sword_SWKey
+ * Method:    error
+ * Signature: ()C
+ */
+JNIEXPORT jchar JNICALL Java_org_crosswire_android_sword_SWKey_error
+		(JNIEnv *env, jobject me) {
+
+	SWKey *key = getKey(env, me);
+	return key ? key->popError() : -99;
+}
+
+/*
+ * Class:     org_crosswire_android_sword_SWKey
+ * Method:    begin
+ * Signature: ()V
+ */
+JNIEXPORT void JNICALL Java_org_crosswire_android_sword_SWKey_begin
+		(JNIEnv *env, jobject me) {
+
+	SWKey *key = getKey(env, me);
+	if (key) key->setPosition(sword::TOP);
+}
+
+/*
+ * Class:     org_crosswire_android_sword_SWKey
+ * Method:    next
+ * Signature: ()V
+ */
+JNIEXPORT void JNICALL Java_org_crosswire_android_sword_SWKey_next
+		(JNIEnv *env, jobject me) {
+
+	SWKey *key = getKey(env, me);
+	if (key) key->increment();
+}
+
+/*
+ * Class:     org_crosswire_android_sword_SWKey
+ * Method:    previous
+ * Signature: ()V
+ */
+JNIEXPORT void JNICALL Java_org_crosswire_android_sword_SWKey_previous
+		(JNIEnv *env, jobject me) {
+
+	SWKey *key = getKey(env, me);
+	if (key) key->decrement();
+}
+
+/*
+ * Class:     org_crosswire_android_sword_SWKey
+ * Method:    hasChildren
+ * Signature: ()Z
+ */
+JNIEXPORT jboolean JNICALL Java_org_crosswire_android_sword_SWKey_hasChildren
+		(JNIEnv *env, jobject me) {
+
+	SWKey *key = getKey(env, me);
+	TreeKeyIdx *tkey = SWDYNAMIC_CAST(TreeKeyIdx, key);
+	return (tkey && tkey->hasChildren()) ? JNI_TRUE : JNI_FALSE;
+}
+
+/*
+ * Class:     org_crosswire_android_sword_SWKey
+ * Method:    getChildren
+ * Signature: ()[Ljava/lang/String;
+ */
+JNIEXPORT jobjectArray JNICALL Java_org_crosswire_android_sword_SWKey_getChildren
+		(JNIEnv *env, jobject me) {
 
 	jclass clazzString = env->FindClass("java/lang/String");
 	jobjectArray ret = nullptr;
 
-	SWModule *module = getModule(env, me);
+	SWKey *key = getKey(env, me);
 
-	if (module) {
-		sword::SWKey *key = module->getKey();
+	if (key) {
 		int count = 0;
 
 		sword::VerseKey *vkey = SWDYNAMIC_CAST(VerseKey, key);
@@ -1811,35 +1933,27 @@ JNIEXPORT jobjectArray JNICALL Java_org_crosswire_android_sword_SWModule_getKeyC
 	return ret;
 }
 
-
 /*
- * Class:     org_crosswire_android_sword_SWModule
- * Method:    getKeyParent
+ * Class:     org_crosswire_android_sword_SWKey
+ * Method:    getParent
  * Signature: ()Ljava/lang/String;
  */
-JNIEXPORT jstring JNICALL Java_org_crosswire_android_sword_SWModule_getKeyParent
+JNIEXPORT jstring JNICALL Java_org_crosswire_android_sword_SWKey_getParent
 		(JNIEnv *env, jobject me) {
-
-	init(env);
-
 
 	SWBuf retVal = "";
 
-	SWModule *module = getModule(env, me);
-
-	if (module) {
-
-		sword::SWKey *key = module->getKey();
-
-		TreeKeyIdx *tkey = SWDYNAMIC_CAST(TreeKeyIdx, key);
-		if (tkey) {
-			if (tkey->parent()) {
-				retVal = tkey->getText();
-			}
+	SWKey *key = getKey(env, me);
+	TreeKeyIdx *tkey = SWDYNAMIC_CAST(TreeKeyIdx, key);
+	if (tkey) {
+		if (tkey->parent()) {
+			retVal = tkey->getText();
 		}
 	}
 	return strToUTF8Java(env, retVal);
 }
+
+
 
 
 /*

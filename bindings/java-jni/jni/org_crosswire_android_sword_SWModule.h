@@ -107,26 +107,10 @@ JNIEXPORT jstring JNICALL Java_org_crosswire_android_sword_SWModule_getKeyText
 
 /*
  * Class:     org_crosswire_android_sword_SWModule
- * Method:    hasKeyChildren
- * Signature: ()Z
+ * Method:    nativeGetKey
+ * Signature: ()J
  */
-JNIEXPORT jboolean JNICALL Java_org_crosswire_android_sword_SWModule_hasKeyChildren
-  (JNIEnv *, jobject);
-
-/*
- * Class:     org_crosswire_android_sword_SWModule
- * Method:    getKeyChildren
- * Signature: ()[Ljava/lang/String;
- */
-JNIEXPORT jobjectArray JNICALL Java_org_crosswire_android_sword_SWModule_getKeyChildren
-  (JNIEnv *, jobject);
-
-/*
- * Class:     org_crosswire_android_sword_SWModule
- * Method:    getKeyParent
- * Signature: ()Ljava/lang/String;
- */
-JNIEXPORT jstring JNICALL Java_org_crosswire_android_sword_SWModule_getKeyParent
+JNIEXPORT jlong JNICALL Java_org_crosswire_android_sword_SWModule_nativeGetKey
   (JNIEnv *, jobject);
 
 /*
