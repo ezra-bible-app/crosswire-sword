@@ -75,6 +75,7 @@
 
 #define FTPLIB_BUFSIZ 8192
 #define ACCEPT_TIMEOUT 10
+#define CONTROL_TIMEOUT 30
 
 #define FTPLIB_CONTROL 0
 #define FTPLIB_READ 1
@@ -234,6 +235,30 @@ static int socket_wait(netbuf *ctl)
 }
 
 /*
+ * control_wait - wait for data on the control connection, so a server that
+ * stops responding cannot block us forever (the control connection has no
+ * idle callback).
+ *
+ * return 1 if data is available, 0 on timeout or error
+ */
+static int control_wait(netbuf *ctl)
+{
+    fd_set rfd;
+    struct timeval tv = ctl->idletime;
+    int rv;
+
+    if (tv.tv_sec == 0 && tv.tv_usec == 0)
+        tv.tv_sec = CONTROL_TIMEOUT;
+
+    FD_ZERO(&rfd);
+    FD_SET(ctl->handle, &rfd);
+    rv = select(ctl->handle+1, &rfd, NULL, NULL, &tv);
+    if (rv == 0)
+        fprintf(stderr, "ftplib: timeout waiting for server response\n");
+    return (rv > 0);
+}
+
+/*
  * read a line of text
  *
  * return -1 on error or bytecount
@@ -292,7 +317,15 @@ static int readline(char *buf,int max,netbuf *ctl)
                     retval = -1;
                 break;
             }
-          if (!socket_wait(ctl))
+          if (ctl->dir == FTPLIB_CONTROL)
+            {
+                if (!control_wait(ctl))
+                  {
+                      retval = -1;
+                      break;
+                  }
+            }
+          else if (!socket_wait(ctl))
               return retval;
           if ((x = (int)net_read(ctl->handle,ctl->cput,ctl->cleft)) == -1)
             {
