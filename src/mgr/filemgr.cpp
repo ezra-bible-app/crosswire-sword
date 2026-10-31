@@ -567,7 +567,7 @@ char FileMgr::getLine(FileDesc *fDesc, SWBuf &line) {
 
 		// clean up any trailing junk on line if we're at the end
 		if (!more) {
-			for (; end > start; end--) {
+			for (; end >= start; end--) {
 				if ((chunk[end] != 10) && (chunk[end] != 13) && (chunk[end] != ' ') && (chunk[end] != '\t')) {
 					if (chunk[end] == '\\') {
 						more = true;
