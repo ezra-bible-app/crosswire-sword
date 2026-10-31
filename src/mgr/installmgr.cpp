@@ -318,6 +318,11 @@ SWLOGD("remoteCopy: %s, %s, %s, %c, %s", (is?is->source.c_str():"null"), src, (d
 	else if (is->type == "HTTP" || is->type == "HTTPS") {
 		trans = createHTTPTransport(is->source, statusReporter);
 	}
+	if (!trans) {
+		// no transport available for this source type (e.g. HTTP(S) without cURL support)
+SWLOGD("remoteCopy: no transport available for source type %s", is->type.c_str());
+		return -1;
+	}
 	transport = trans; // set classwide current transport for other thread terminate() call
 	if (is->u.length()) {
 		trans->setUser(is->u);
