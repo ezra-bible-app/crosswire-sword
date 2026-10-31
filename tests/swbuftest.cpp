@@ -164,7 +164,7 @@ int main(int argc, char **argv) {
 	cout << "Value should be (value): " << prefixTest << "\n";
 
 	x = utf8ToWChar("ⲉⲛⲧⲁⲡⲛⲟⲩⲧⲉ");
-	cout << (wchar_t *)x.getRawData() << "\n";
+	cout << "wchar bytes: " << x.length() << "\n";
 	x = wcharToUTF8((wchar_t *)x.getRawData());
 	cout << x << "\n";
 

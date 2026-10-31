@@ -56,8 +56,12 @@ const char RawVerse::nl = '\n';
  *		(e.g. 'modules/texts/rawtext/webster/')
  */
 
+RawVerse::RawVerse(const RawVerse &other) : RawVerse(other.path, other.fileMode) {}
+
+
 RawVerse::RawVerse(const char *ipath, int fileMode)
 {
+	this->fileMode = fileMode;
 	SWBuf buf;
 
 	path = 0;

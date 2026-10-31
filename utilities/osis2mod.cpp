@@ -24,15 +24,16 @@
 	#pragma warning( disable: 4251 )
 #endif
 
-#include <ctype.h>
-#include <stdio.h>
-#include <fcntl.h>
-#include <errno.h>
-#include <stdlib.h>
+#include <cctype>
+#include <cstdio>
+//#include <fcntl.h>
+#include <cerrno>
+#include <cstdlib>
 #include <stack>
 #include <vector>
 #include <iostream>
 #include <fstream>
+#include <cstring>
 
 #include <utilstr.h>
 #include <swmgr.h>
@@ -42,6 +43,8 @@
 #include <utilxml.h>
 #include <listkey.h>
 #include <versekey.h>
+#include <versificationmgr.h>
+#include <filemgr.h>
 #include <swversion.h>
 
 #include <ztext.h>
@@ -71,19 +74,20 @@
 using namespace sword;
 #endif
 
-using namespace std;
+//using namespace std;
 
-int       debug            =   0; // mask of debug flags
-const int DEBUG_WRITE      =   1; // writing to module
-const int DEBUG_VERSE      =   2; // verse start and end
-const int DEBUG_QUOTE      =   4; // quotes, especially Words of Christ (WOC)
-const int DEBUG_TITLE      =   8; // titles
-const int DEBUG_INTERVERSE =  16; // inter-verse maerial
-const int DEBUG_XFORM      =  32; // transformations
-const int DEBUG_REV11N     =  64; // versification
-const int DEBUG_REF        = 128; // parsing of osisID and osisRef
-const int DEBUG_STACK      = 256; // cleanup of references
-const int DEBUG_OTHER      = 512; // ins and outs of books, chapters and verses
+int       debug            =    0; // mask of debug flags
+const int DEBUG_WRITE      =    1; // writing to module
+const int DEBUG_VERSE      =    2; // verse start and end
+const int DEBUG_QUOTE      =    4; // quotes, especially Words of Christ (WOC)
+const int DEBUG_TITLE      =    8; // titles
+const int DEBUG_INTERVERSE =   16; // inter-verse material
+const int DEBUG_XFORM      =   32; // transformations
+const int DEBUG_REV11N     =   64; // versification
+const int DEBUG_REF        =  128; // parsing of osisID and osisRef
+const int DEBUG_STACK      =  256; // cleanup of references
+const int DEBUG_OTHER      =  512; // ins and outs of books, chapters and verses
+const int DEBUG_PARSE      = 1024; // parsing of numeric and character entities.
 
 // Exit codes
 const int EXIT_BAD_ARG     =   1; // Bad parameter given for program
@@ -91,6 +95,8 @@ const int EXIT_NO_WRITE    =   2; // Could not open the module for writing
 const int EXIT_NO_CREATE   =   3; // Could not create the module
 const int EXIT_NO_READ     =   4; // Could not open the input file for reading.
 const int EXIT_BAD_NESTING =   5; // BSP or BCV nesting is bad
+const int EXIT_BAD_COMMENT =   6; // XML Comment is bad
+const int EXIT_BAD_ENTITY  =   7; // XML Entity is bad
 
 #ifdef _ICU_
 UTF8NFC    normalizer;
@@ -103,23 +109,124 @@ int normalized = 0;
 int converted  = 0;
 
 SWText *module = 0;
+unsigned int linePos = 0;
+unsigned int charPos = 0;
 VerseKey currentVerse;
 SWBuf v11n     = "KJV";
-char activeOsisID[255];
-char currentOsisID[255];
+char currentOsisID[255] = "N/A";
 
 SWBuf activeVerseText;
-
-ListKey currentKeyIDs = ListKey();
 
 std::vector<ListKey> linkedVerses;
 
 static bool inCanonicalOSISBook = true; // osisID is for a book that is not in Sword's canon
 static bool normalize           = true; // Whether to normalize UTF-8 to NFC
 
+/**
+ * @brief Generate a standardized identifier message for error or status reporting.
+ *
+ * This routine efficiently constructs a message identifier of the form:
+ *   type(kind)[linePos,charPos] osisID=osisID:
+ *
+ * - If linePos is 0, the position ([linePos,charPos]) is omitted.
+ * - If osisID is nullptr or empty, the osisID part is omitted.
+ * - The returned string always ends with a colon and a trailing space (": ").
+ *
+ * @param type           The message type (e.g., "ERROR", "WARNING", "INFO").
+ * @param kind           The message category or kind (e.g., "REF", "PARSE").
+ * @param osisID         (Optional) The current OSIS ID to include. May be nullptr or empty.
+ * @return SWBuf         The formatted identifier string.
+ *
+ * @note Uses the global variables linePos and charPos for position information.
+ *
+ * @example
+ *   SWBuf id = identifyMsg("ERROR", "REF");
+ *   // Possible output: "ERROR(REF): "
+ *
+ *   SWBuf id = identifyMsg("ERROR", "REF", "GEN.1.1");
+ *   // Possible output: "ERROR(REF)[12,34] osisID=GEN.1.1: "
+ */
+inline SWBuf identifyMsg(const char* type, const char* kind, const char* osisID = nullptr) {
+	char buf[192];
+	int len = std::snprintf(buf, sizeof(buf), "%s(%s)", type, kind);
+
+	// Only include position if linePos > 0
+	if (linePos > 0) {
+		len += std::snprintf(buf + len, sizeof(buf) - len, "[%u,%u]", linePos, charPos);
+	}
+
+	// Only include osisID if provided and not empty
+	if (osisID && *osisID) {
+		len += std::snprintf(buf + len, sizeof(buf) - len, "(%s)", osisID);
+	}
+
+	// Always end with ": "
+	len += std::snprintf(buf + len, sizeof(buf) - len, ": ");
+
+	// Clamp len to buffer size in case of truncation
+	if (len < 0 || len >= (int)sizeof(buf)) {
+		len = sizeof(buf) - 1;
+	}
+	return SWBuf(buf, len);
+}
+
+/**
+ * Resolves an abbreviation or partial name against a list of candidate strings.
+ *
+ * The matching strategy is:
+ *   1. Case-sensitive exact match: returns immediately if a single exact match is found.
+ *   2. Case-insensitive exact match: uses UTF-8 safe toUpper() and returns immediately on match.
+ *   3. Case-insensitive prefix match: returns all matching candidates that begin with the input.
+ *
+ * This function does not assume anything about the semantic meaning of the entries —
+ * it can be used for versification systems, module names, etc.
+ *
+ * @param input The user-provided input string (abbreviation or full name).
+ * @param candidates The list of valid full names to resolve against.
+ * @return A StringList of matching entries (0 = no match, 1 = exact match, >1 = ambiguous).
+ */
+static StringList resolve_abbreviation(const SWBuf &input, const StringList &candidates) {
+	StringList matches;
+
+	// 1. Case-sensitive exact match
+	for (const SWBuf &candidate : candidates) {
+		if (input == candidate) {
+			matches.push_back(candidate);
+			return matches;
+		}
+	}
+
+	// Convert input to uppercase for case-insensitive comparisons
+	SWBuf inputUpper = input;
+	inputUpper.toUpper();
+
+	// 2. Case-insensitive exact match
+	for (const SWBuf &candidate : candidates) {
+		SWBuf candidateUpper = candidate;
+		candidateUpper.toUpper();
+
+		if (inputUpper == candidateUpper) {
+			matches.push_back(candidate);
+			return matches;
+		}
+	}
+
+	// 3. Case-insensitive prefix match
+	for (const SWBuf &candidate : candidates) {
+		SWBuf candidateUpper = candidate;
+		candidateUpper.toUpper();
+
+		if (candidateUpper.startsWith(inputUpper)) {
+			matches.push_back(candidate);
+		}
+	}
+
+	return matches;
+}
+
 bool isOSISAbbrev(const char *buf) {
 	VersificationMgr *vmgr = VersificationMgr::getSystemVersificationMgr();
-	const VersificationMgr::System *av11n = vmgr->getVersificationSystem(currentVerse.getVersificationSystem());
+	const VersificationMgr::System *av11n = vmgr->getVersificationSystem(v11n);
 	return av11n->getBookNumberByOSISName(buf) >= 0;
 }
 
@@ -204,7 +311,11 @@ void prepareSWText(const char *osisID, SWBuf &text)
 
 	// Trust, but verify.
 	if (!normalize && !utf8State) {
-		cout << "WARNING(UTF8): " << osisID << ": Should be converted to UTF-8 (" << text << ")" << endl;
+		std::cout << identifyMsg("WARNING", "UTF8", osisID)
+			  << "Should be converted to UTF-8 ("
+			  << text
+			  << ")"
+			  << std::endl;
 	}
 
 #ifdef _ICU_
@@ -212,7 +323,11 @@ void prepareSWText(const char *osisID, SWBuf &text)
 		// Don't need to normalize text that is ASCII
 		// But assume other non-UTF-8 text is Latin1 (cp1252) and convert it to UTF-8
 		if (!utf8State) {
-			cout << "INFO(UTF8): " << osisID << ": Converting to UTF-8 (" << text << ")" << endl;
+			std::cout << identifyMsg("INFO", "UTF8", osisID)
+				  << "Converting to UTF-8 ("
+				  << text
+				  << ")"
+				  << std::endl;
 			converter.processText(text, (SWKey *)2);  // note the hack of 2 to mimic a real key. TODO: remove all hacks
 			converted++;
 
@@ -224,7 +339,11 @@ void prepareSWText(const char *osisID, SWBuf &text)
 
 		// Double check. This probably can be removed.
 		if (!utf8State) {
-			cout << "ERROR(UTF8): " << osisID << ": Converting to UTF-8 (" << text << ")" << endl;
+			std::cout << identifyMsg("ERROR", "UTF8", osisID)
+				  << "Converting to UTF-8 ("
+				  << text
+				  << ")"
+				  << std::endl;
 		}
 
 		if (utf8State > 0) {
@@ -232,136 +351,173 @@ void prepareSWText(const char *osisID, SWBuf &text)
 			normalizer.processText(text, (SWKey *)2);  // note the hack of 2 to mimic a real key. TODO: remove all hacks
 			if (before != text) {
 				normalized++;
+				std::cout << identifyMsg("INFO", "UTF8", osisID)
+					  << "Converting to UTF-8 ("
+					  << before
+					  << ")"
+					  << std::endl;
 			}
 		}
 	}
 #endif
 }
 
-// This routine converts an osisID or osisRef into one that SWORD can parse into a verse list
-// An osisRef is made up of:
-// a single osisID
-// an osisID-osisID
-// or
-// an osisRef osisRef
-//
-// An osisID can have a work prefix which is terminated by a : and may have a grain
-// which is started by a !
-//
-// However, SWORD cannot handle work prefixes or grains and expects ranges to be
-// separated with a single;
+/**
+ * @brief Converts an osisID or osisRef into a SWORD-parseable verse list.
+ *
+ * osisRef can be:
+ * - a single osisID
+ * - an osisID-osisID
+ * - or a sequence: osisRef osisRef
+ *
+ * osisID may have a work prefix (terminated by ':') and/or a grain suffix (started by '!').
+ * SWORD cannot handle work prefixes or grains and expects sequences separated by a ';'.
+ * This routine modifies the input buffer in place, stripping work prefixes and grains,
+ * and replacing whitespace between osisRefs with ';'.
+ *
+ * @param buf [in,out] SWBuf containing the osisRef (will be modified in place)
+ */
 void prepareSWVerseKey(SWBuf &buf) {
-	// This routine modifies the buf in place
-	char* s = buf.getRawData();
-	char* p = s;
+	SWBuf orig       = buf;
+	char* bufStart   = buf.getRawData();
+	char* bufWrite   = bufStart;
+	char* bufRead    = bufStart;
+	char* tokenStart = bufStart;
 	bool inRange = false;
-	while (*p) {
-		if (inRange) {
-			if (debug & DEBUG_REF) {
-				cout << "DEBUG(REF): Copy range marker:" << *p << endl;;
-			}
 
+	// Early exit if no work prefix, grain, or whitespace
+	if (!std::strpbrk(bufStart, "! :")) {
+		if (debug & DEBUG_REF) {
+			std::cout << identifyMsg("DEBUG", "REF", orig)
+				  << "VerseKey can parse this as is."
+				  << std::endl;
+		}
+		return;
+	}
+
+	while (*bufRead) {
+		if (inRange) {
 			// Range markers are copied as is
-			*s++ = *p++;
+			*bufWrite++ = *bufRead++;
+
+			if (debug & DEBUG_REF) {
+				std::cout << identifyMsg("DEBUG", "REF", orig)
+					  << "Found a range marker."
+					  << " Progress: "
+					  << std::string(bufStart, bufWrite)
+					  << " Remaining: "
+					  << bufRead
+					  << std::endl;
+			}
 		}
 
 		// Look ahead to see if we are in a work prefix
 		// but don't look past an osisID
-		char *n = p;
-		while (*n && *n != ':' && *n != ' ' && *n != '-') {
-			n++;
-		}
-
+		char* lookahead = std::strpbrk(bufRead, ": -");
 		// We have found a work prefix
-		if (*n == ':') {
-			// set p to skip the work prefix
-			p = n + 1;
+		if (lookahead && *lookahead == ':') {
+			tokenStart = bufRead;
+			// set bufRead to skip the work prefix
+			bufRead = ++lookahead;
 
 			if (debug & DEBUG_REF) {
-				cout << "DEBUG(REF): Found a work prefix ";
-				for (char *x = s; x <= n; x++) {
-					cout << *x;
-				}
-				cout << endl;
+				std::cout << identifyMsg("DEBUG", "REF", orig)
+					  << "Found a work prefix "
+					  << std::string(tokenStart, lookahead)
+					  << " Progress: "
+					  << std::string(bufStart, bufWrite)
+					  << " Remaining: "
+					  << bufRead
+					  << std::endl;
 			}
 		}
 
 		// Now we are in the meat of an osisID.
 		// Copy it to its end but stop on a grain marker of '!'
-		if (debug & DEBUG_REF) {
-			cout << "DEBUG(REF): Copy osisID:";
-		}
-
-		while (*p && *p != '!' && *p != ' ' && *p != '-') {
-			if (debug & DEBUG_REF) {
-				cout << *p;
-			}
-
-			*s++ = *p++;
+		// Look ahead to see if we have a grain suffix
+		// but don't look past an osisID
+		lookahead = std::strpbrk(bufRead, "! -");
+		if (!lookahead) {
+			lookahead = bufRead + strlen(bufRead);
 		}
 
 		if (debug & DEBUG_REF) {
-			cout << endl;
+			std::cout << identifyMsg("DEBUG", "REF", orig)
+				  << "Found an osisID: "
+				  << std::string(bufRead, lookahead);
+		}
+
+		while (bufRead < lookahead) {
+			*bufWrite++ = *bufRead++;
+		}
+
+		if (debug & DEBUG_REF) {
+			std::cout << " Progress: "
+				  << std::string(bufStart, bufWrite)
+				  << " Remaining: "
+				  << bufRead
+				  << std::endl;
 		}
 
 		// The ! and everything following until we hit
 		// the end of the osisID is part of the grain reference
-		if (*p == '!') {
-			n = p;
-			while (*n && *n != ' ' && *n != '-') {
-				n++;
+		if (*bufRead == '!') {
+			tokenStart = bufRead;
+			bufRead = std::strpbrk(tokenStart, " -");
+			if (!bufRead) {
+				bufRead = tokenStart + strlen(tokenStart);
 			}
 
 			if (debug & DEBUG_REF) {
-				cout << "DEBUG(REF): Found a grain suffix ";
-				for (char *x = p; x < n; x++) {
-					cout << *x;
-				}
-				cout << endl;
+				std::cout << identifyMsg("DEBUG", "REF", orig)
+					  << "Found a grain suffix "
+					  << std::string(tokenStart, bufRead)
+					  << " Progress: "
+					  << std::string(bufStart, bufWrite)
+					  << " Remaining: "
+					  << bufRead
+					  << std::endl;
 			}
-
-			p = n;
 		}
 
 		// At this point we have processed an osisID
 
 		// if we are not in a range and the next characer is a -
 		// then we are entering a range
-		inRange = !inRange && *p == '-';
-
-		if (debug & DEBUG_REF) {
-			if (inRange) {
-				cout << "DEBUG(REF): Found a range" << endl;
-			}
-		}
+		inRange = !inRange && *bufRead == '-';
 
 		// between ranges and stand alone osisIDs we might have whitespace
-		if (!inRange && *p == ' ') {
+		if (!inRange && *bufRead == ' ') {
 			// skip this and subsequent spaces
-			while (*p == ' ') {
-				p++;
+			while (*bufRead == ' ') {
+				bufRead++;
 			}
 
 			// replacing them all with a ';'
-			*s++ = ';';
+			*bufWrite++ = ';';
 
 			if (debug & DEBUG_REF) {
-				cout << "DEBUG(REF): replacing space with ;. Remaining: " << p << endl;
+				std::cout << identifyMsg("DEBUG", "REF", orig)
+					  << "Replacing space with ;. "
+					  << " Progress "
+					  << std::string(bufStart, bufWrite)
+					  << " Remaining: "
+					  << bufRead
+					  << std::endl;
 			}
 		}
 	}
 
-	// Determine whether we have modified the buffer
-	// We have modified the buffer if s is not sitting on the null byte of the original
-	if (*s) {
-		// null terminate the reference
-		*s = '\0';
-		// Since we modified the swbuf, we need to tell it what we have done
-		buf.setSize(s - buf.c_str());
+	// Now that the buffer is modified, it needs to be terminated
+	*bufWrite = '\0';
+	// Since we modified the swbuf, we need to tell it what we have done
+	buf.setSize(bufWrite - buf.c_str());
 
-		if (debug & DEBUG_REF) {
-			cout << "DEBUG(REF): shortended keyVal to`" << buf.c_str() << "`"<< endl;
-		}
+	if (debug & DEBUG_REF) {
+		std::cout << identifyMsg("DEBUG", "REF", orig)
+			  << "Parseable VerseKey -- "
+			  << buf.c_str()
+			  << std::endl;
 	}
 }
 
@@ -374,22 +530,23 @@ bool isValidRef(const char *buf, const char *caller) {
 	// Note: need to turn on headings so that a heading does not get normalized anyway
 	// And set it to the reference under question
 	VerseKey before;
-	before.setVersificationSystem(currentVerse.getVersificationSystem());
+	before.setVersificationSystem(v11n);
 	before.setAutoNormalize(false);
 	before.setIntros(true);
 	before.setText(buf);
 
 	// If we are a heading we must bail
 	// These will autonormalize to the last verse of the prior chapter
-	if (!before.getTestament() || !before.getBook() || !before.getChapter() || !before.getVerse()) {
-		return true;
-	}
+	//if (!before.getTestament() || !before.getBook() || !before.getChapter() || !before.getVerse()) {
+	//	return true;
+	//}
 
 	// Create a VerseKey that does do auto normalization
 	// And set it to the reference under question
 	VerseKey after;
-	after.setVersificationSystem(currentVerse.getVersificationSystem());
+	after.setVersificationSystem(v11n);
 	after.setAutoNormalize(true);
+	after.setIntros(true);
 	after.setText(buf);
 
 	if (before == after)
@@ -398,9 +555,14 @@ bool isValidRef(const char *buf, const char *caller) {
 	}
 
 	// If we have gotten here the reference is not in the selected versification.
-	// cout << "INFO(V11N): " << before << " is not in the " << currentVerse.getVersificationSystem() << " versification." << endl;
+	// std::cout << identifyMsg("INFO", "V11N", before.getOSISRef()) << " is not in the " << currentVerse.getVersificationSystem() << " versification." << std::endl;
 	if (debug & DEBUG_REV11N) {
-		cout << "DEBUG(V11N)[" << caller << "]: " << before << " normalizes to "  << after << endl;
+		std::cout << identifyMsg("DEBUG", "V11N", before.getOSISRef())
+			  << "{"
+			  << caller
+			  << "}  normalizes to "
+			  << after.getOSISRef()
+			  << std::endl;
 	}
 
 	return false;
@@ -432,7 +594,7 @@ bool isValidRef(const char *buf, const char *caller) {
  */
 void makeValidRef(VerseKey &key) {
 	VerseKey saveKey;
-	saveKey.setVersificationSystem(key.getVersificationSystem());
+	saveKey.setVersificationSystem(v11n);
 	saveKey.setAutoNormalize(false);
 	saveKey.setIntros(true);
 	saveKey = key;
@@ -440,7 +602,8 @@ void makeValidRef(VerseKey &key) {
 	// Since isValidRef returned false constrain the key to the nearest prior reference.
 	// If we are past the last chapter set the reference to the last chapter
 	int chapterMax = key.getChapterMax();
-	if (key.getChapter() > chapterMax) {
+	bool beyondChapter = key.getChapter() > chapterMax;
+	if (beyondChapter) {
 		key.setChapter(chapterMax);
 	}
 
@@ -451,7 +614,12 @@ void makeValidRef(VerseKey &key) {
 	key.setVerse(verseMax);
 
 	if (debug & DEBUG_REV11N) {
-		cout << "DEBUG(V11N) Chapter max:" << chapterMax << ", Verse Max:" << verseMax << endl;
+		std::cout << identifyMsg("DEBUG", "V11N", saveKey.getOSISRef())
+			  << "Chapter max:"
+			  << chapterMax
+			  << ", Verse Max:"
+			  << verseMax
+			  << std::endl;
 	}
 
 	// There are three cases we want to handle:
@@ -471,46 +639,58 @@ void makeValidRef(VerseKey &key) {
 	//    In this case we should re-versify Matt.7.30 as Matt.7.29.
 	//    However, since this and 2) are ambiguous, we'll re-reversify to the last entry in the module.
 	
-	while (!key.popError() && !module->hasEntry(&key)) {
+	while (!beyondChapter && !key.popError() && !module->hasEntry(&key)) {
 		key.decrement(1);
 	}
 
-	cout << "INFO(V11N): " << saveKey.getOSISRef()
-	     << " is not in the " << key.getVersificationSystem()
-	     << " versification. Appending content to " << key.getOSISRef() << endl;
+	std::cout << identifyMsg("INFO", "V11N", saveKey.getOSISRef())
+		  << " Verse is not in the "
+		  << v11n
+		  << " versification. Appending content to "
+		  << key.getOSISRef()
+		  << std::endl;
 }
 
 void writeEntry(SWBuf &text, bool force = false) {
 	char keyOsisID[255];
 
-	static SWBuf revision; revision.setFormatted("<milestone type=\"x-importer\" subType=\"x-osis2mod\" n=\"$Rev$ (SWORD: %s)\"/>", SWVersion::currentVersion.getText());
-	static bool firstOT = true;
-	static bool firstNT = true;
+	static bool firstCall = true;
+	static SWBuf revision;
+	static VerseKey lastKey;
+	static char activeOsisID[255] = "";
+	static bool firstOut  = true;
 
+	// do static initialization once
+	if (firstCall) {
+		revision.setFormatted("<milestone type=\"x-importer\" subType=\"x-osis2mod\" n=\"$Rev$ (SWORD: %s)\"/>", SWVersion::currentVersion.getText());
+		lastKey.setVersificationSystem(v11n);
+		lastKey.setAutoNormalize(false);
+		lastKey.setIntros(true);
+		firstCall = false;
+	}
+
+	// When we've seen a book and it is not in the v11n, skip it
 	if (!inCanonicalOSISBook) {
 		return;
 	}
 
-	strcpy(keyOsisID, currentVerse.getOSISRef());
-
-	// set keyOsisID to anything that an osisID cannot be.
-	if (force) {
-		strcpy(keyOsisID, "-force");
+	// If we have module or testament intros we don't have a book and no osisID
+	// so use the SWORD reference instead
+	if (currentVerse.getBook()) {
+		strcpy(keyOsisID, currentVerse.getOSISRef());
+	}
+	else {
+		strcpy(keyOsisID, currentVerse.getText());
 	}
 
-	static VerseKey lastKey;
-	lastKey.setVersificationSystem(currentVerse.getVersificationSystem());
-	lastKey.setAutoNormalize(0);
-	lastKey.setIntros(1);
-
 	VerseKey saveKey;
-	saveKey.setVersificationSystem(currentVerse.getVersificationSystem());
-	saveKey.setAutoNormalize(0);
-	saveKey.setIntros(1);
+	saveKey.setVersificationSystem(v11n);
+	saveKey.setAutoNormalize(false);
+	saveKey.setIntros(true);
 	saveKey = currentVerse;
 
-	// If we have seen a verse and the supplied one is different then we output the collected one.
-	if (*activeOsisID && strcmp(activeOsisID, keyOsisID)) {
+	// Do the write behind when have seen a verse and the supplied one is different then we output the collected one or forced.
+	if (*activeOsisID && (force || strcmp(activeOsisID, keyOsisID))) {
 
 		if (!isValidRef(lastKey, "writeEntry")) {
 			makeValidRef(lastKey);
@@ -522,25 +702,27 @@ void writeEntry(SWBuf &text, bool force = false) {
 
 		// Put the revision into the module
 		int testmt = currentVerse.getTestament();
-		if ((testmt == 1 && firstOT) || (testmt == 2 && firstNT)) {
-			VerseKey t;
-			t.setVersificationSystem(currentVerse.getVersificationSystem());
-			t.setAutoNormalize(0);
-			t.setIntros(1);
-			t = currentVerse;
-			currentVerse.setBook(0);
-			currentVerse.setChapter(0);
-			currentVerse.setVerse(0);
-			module->setEntry(revision);
-			currentVerse = t;
-			switch (testmt) {
-			case 1:
-				firstOT = false;
-				break;
-			case 2:
-				firstNT = false;
-				break;
+		if (firstOut) {
+			// If we outputting a module or testament intro, prepend the revision.
+			// otherwise output it as a module heading
+			if (testmt == 0 || currentVerse.getBook() == 0) {
+				activeVerseText = revision + activeVerseText;
 			}
+			else {
+				// save off the current verse
+				VerseKey t;
+				t.setVersificationSystem(v11n);
+				t.setAutoNormalize(false);
+				t.setIntros(true);
+				t = currentVerse;
+				// Setting the testament will set Book, Chapter and Verse to 0
+				currentVerse.setTestament(testmt);
+				// write the revision
+				module->setEntry(revision);
+				// restore the current verse
+				currentVerse = t;
+			}
+			firstOut = false;
 		}
 
 		// If the desired output encoding is non-UTF-8, convert to that encoding
@@ -554,7 +736,12 @@ void writeEntry(SWBuf &text, bool force = false) {
 		if (module->hasEntry(&currentVerse)) {
 			module->flush();
 			SWBuf currentText = module->getRawEntry();
-			cout << "INFO(WRITE): Appending entry: " << currentVerse.getOSISRef() << ": " << activeVerseText << endl;
+			std::cout << identifyMsg("INFO", "WRITE", activeOsisID)
+				  << "Appending entry to "
+				  << currentVerse.getOSISRef()
+				  << ": "
+				  << activeVerseText
+				  << std::endl;
 
 			// If we have a non-UTF-8 encoding, we should decode it before concatenating, then re-encode it
 			if (outputDecoder) {
@@ -567,15 +754,23 @@ void writeEntry(SWBuf &text, bool force = false) {
 			}
 		}
 
+		// For further debugging introductions
+//		if (debug & DEBUG_VERSE) {
+//			SWBuf currentText = currentVerse.getText();
+//			activeVerseText = currentText + ":" + activeVerseText;
+//		}
+
 		if (debug & DEBUG_WRITE) {
-			cout << "DEBUG(WRITE): " << activeOsisID << ":" << currentVerse.getOSISRef() << ": " << activeVerseText << endl;
+			std::cout << identifyMsg("DEBUG", "WRITE", activeOsisID)
+				  << activeVerseText
+				  << std::endl;
 		}
 
 		module->setEntry(activeVerseText);
 		activeVerseText = "";
 	}
 
-	// The following is for initial verse content and for appending interverse content.
+	// The following is for initial verse content and for appending interverse colophon and end tags.
 	if (activeVerseText.length()) {
 		activeVerseText += text;
 	}
@@ -600,13 +795,16 @@ void linkToEntry(VerseKey &linkKey, VerseKey &dest) {
 	}
 
 	VerseKey saveKey;
-	saveKey.setVersificationSystem(currentVerse.getVersificationSystem());
-	saveKey.setAutoNormalize(0);
-	saveKey.setIntros(1);
+	saveKey.setVersificationSystem(v11n);
+	saveKey.setAutoNormalize(false);
+	saveKey.setIntros(true);
 	saveKey = currentVerse;
 	currentVerse = linkKey;
 
-	cout << "INFO(LINK): Linking " << currentVerse.getOSISRef() << " to " << dest.getOSISRef() << "\n";
+	std::cout << identifyMsg("INFO", "LINK", currentVerse.getOSISRef()) 
+		  << "Linking to " 
+		  << dest.getOSISRef()
+		  << "\n";
 	module->linkEntry(&dest);
 
 	currentVerse = saveKey;
@@ -616,20 +814,38 @@ void linkToEntry(VerseKey &linkKey, VerseKey &dest) {
 //        false if the what has been seen is to be accumulated and considered later.
 bool handleToken(SWBuf &text, XMLTag token) {
 
+	// Flags identifying what part of the OSIS document is being seen.
+	// Flag indicating whether we are processing the content of a module; false prior to the first div tag
+	static bool               inModule          = false;
+
+	// Everything from the begin module text and the first book or bookGroup div tag is inModuleIntro
+	static bool               inModuleIntro     = false;
+
+	// Flag indicating whether we are processing the Old Testament
+	static bool               inOT              = false;
+
+	// Flag indicating whether we are processing the New Testament
+	static bool               inNT              = false;
+
+	// Flag indicating whether we are processing the content of a book
+	static bool               inBook          = false;
+
 	// Everything between the begin book tag and the first begin chapter tag is inBookIntro
 	static bool               inBookIntro     = false;
+
+	// Flag indicating whether we are processing the content of a chapter
+	static bool               inChapter       = false;
 
 	// Everything between the begin chapter tag and the first begin verse tag is inChapterIntro
 	static bool               inChapterIntro  = false;
 
-	// Flags indicating whether we are processing the content of a chapter
-	static bool               inChapter       = false;
-
-	// Flags indicating whether we are processing the content of a verse
+	// Flag indicating whether we are processing the content of a verse
 	static bool               inVerse         = false;
 
-	// Flags indicating whether we are processing the content of to be prepended to a verse
+	// Flag indicating whether we are processing the content of to be prepended to a verse
 	static bool               inPreVerse      = false;
+
+	// Generative ID for sID/eID pair
 	static int                genID           = 1;
 
 	// Flag indicating whether we are in "Words of Christ"
@@ -638,7 +854,6 @@ bool handleToken(SWBuf &text, XMLTag token) {
 	static XMLTag             wocTag          = "<q who=\"Jesus\" marker=\"\">";
 
 	// Flag used to indicate where useful text begins
-	static bool               firstDiv        = false;
 	static bool               headerEnded     = false;
 
 	// Retain the sID of book, chapter and verse (commentary) divs so that we can find them again.
@@ -658,8 +873,8 @@ bool handleToken(SWBuf &text, XMLTag token) {
 	static std::stack<XMLTag> tagStack;
 
 	// The following are used to validate well-formedness
-	static int                chapterDepth    = 0;
 	static int                bookDepth       = 0;
+	static int                chapterDepth    = 0;
 	static int                verseDepth      = 0;
 
 	int                       tagDepth        = tagStack.size();
@@ -676,20 +891,39 @@ bool handleToken(SWBuf &text, XMLTag token) {
 			tagStack.push(token);
 
 			if (debug & DEBUG_STACK) {
-				cout << "DEBUG(STACK): " << currentOsisID << ": push (" << tagStack.size() << ") " << token.getName() << endl;
+				std::cout << identifyMsg("DEBUG", "STACK", currentOsisID)
+					  << "Push("
+					  << tagStack.size()
+					  << ") "
+					  << token
+					  << std::endl;
 			}
 		}
 
 		// throw away everything up to the first div (that is outside the header)
-		if (!firstDiv) {
+		if (!inModule) {
 			if (headerEnded && (tokenName == "div")) {
 				if (debug & DEBUG_OTHER) {
-					cout << "DEBUG(FOUND): Found first div and pitching prior material: " << text << endl;
+					std::cout << identifyMsg("DEBUG", "FOUND")
+						  << "Found first div and pitching prior material: "
+						  << text
+						  << std::endl;
 				}
 
 				// TODO: Save off the content to use it to suggest the module's conf.
-				firstDiv = true;
+				inModule = true;
+				inModuleIntro = true;
+
+				// Setting the testament will set Book, Chapter and Verse to 0 when intros are true
+				currentVerse.setTestament(0);
 				text     = "";
+
+				if (debug & DEBUG_TITLE) {
+					std::cout << identifyMsg("DEBUG", "TITLE", currentOsisID)
+						  << "Looking for module introduction"
+						  << std::endl;
+				}
+
 			}
 			else {
 				// Collect the content so it can be used to suggest the module's conf.
@@ -703,34 +937,90 @@ bool handleToken(SWBuf &text, XMLTag token) {
 
 			// BOOK START, <div type="book" ...>
 			if (tokenName == "div" && typeAttr == "book") {
-				if (inBookIntro || inChapterIntro) { // this one should never happen, but just in case
+				if (inModuleIntro) { // this one should never happen, but just in case
+					// Setting the testament will set Book, Chapter and Verse to 0
+					currentVerse.setTestament(0);
 
 					if (debug & DEBUG_TITLE) {
-						cout << "DEBUG(TITLE): " << currentOsisID << ": OOPS INTRO " << endl;
-						cout << "\tinChapterIntro = " << inChapterIntro << endl;
-						cout << "\tinBookIntro = " << inBookIntro << endl;
+						std::cout << identifyMsg("DEBUG", "TITLE", currentVerse)
+							  << "MODULE INTRO(book) "
+							  << text
+							  << std::endl;
 					}
 
-					currentVerse.setTestament(0);
-					currentVerse.setBook(0);
-					currentVerse.setChapter(0);
-					currentVerse.setVerse(0);
 					writeEntry(text);
+
+					inModuleIntro = false;
 				}
+				else {
+					// Now check to see if we have gathered a testament intro.
+
+					// While SWORD allows for the input of books, chapters and verses to appear in any order
+					// this code assumes that that all the books defined in a testament are together.
+					// note the apocrypha, when present, is in either the OT or the NT.
+
+					// Once we have seen a book we are in either the OT or the NT
+					// and we'll remain in that testament until we get to a book in the next testament
+					// Yeah, this allows for the OT to follow the NT and
+					// for the books to be in any order within the testament.
+					// Don't do that!
+
+					// Convert the osisID to a VerseKey in order to grab the testament.
+					VerseKey tmp;
+					tmp.setVersificationSystem(v11n);
+					tmp.setAutoNormalize(false);
+					tmp.setIntros(true);
+					tmp = token.getAttribute("osisID");
+
+					// Setting the testament will set Book, Chapter and Verse to 0
+					tmp.setTestament(tmp.getTestament());
+
+					// The OT Intro only occurs once and is all the material before the OT
+					// that hasn't been handled yet
+					// !inOT verifies that we haven't processed anything in the OT yet
+					if (!inOT && tmp.getTestament() == 1) {
+						if (debug & DEBUG_TITLE) {
+							std::cout << identifyMsg("DEBUG", "TITLE", tmp)
+								  << "OT INTRO "
+								  << text
+								  << std::endl;
+						}
+						currentVerse.setTestament(1);
+						writeEntry(text);
+					}
+
+					// same logic for the NT
+					if (!inNT && tmp.getTestament() == 2) {
+						if (debug & DEBUG_TITLE) {
+							std::cout << identifyMsg("DEBUG", "TITLE", tmp)
+								  << "NT INTRO "
+								  << text << std::endl;
+						}
+						currentVerse.setTestament(2);
+						writeEntry(text);
+					}
+				}
+
 				currentVerse = token.getAttribute("osisID");
 				currentVerse.setChapter(0);
 				currentVerse.setVerse(0);
 				strcpy(currentOsisID, currentVerse.getOSISRef());
 
 				sidBook         = token.getAttribute("sID");
+				inOT            = currentVerse.getTestament() == 1;
+				inNT            = currentVerse.getTestament() == 2;
+				inBook          = true;
 				inChapter       = false;
 				inVerse         = false;
 				inPreVerse      = false;
+				inModuleIntro   = false;
 				inBookIntro     = true;
 				inChapterIntro  = false;
 
 				if (debug & DEBUG_TITLE) {
-					cout << "DEBUG(TITLE): " << currentOsisID << ": Looking for book introduction" << endl;
+					std::cout << identifyMsg("DEBUG", "TITLE", currentOsisID)
+						  << "Looking for book introduction"
+						  << std::endl;
 				}
 
 				bookDepth       = tagStack.size();
@@ -739,10 +1029,16 @@ bool handleToken(SWBuf &text, XMLTag token) {
 
 				inCanonicalOSISBook = isOSISAbbrev(token.getAttribute("osisID"));
 				if (!inCanonicalOSISBook) {
-					cout << "WARNING(V11N): New book is " << token.getAttribute("osisID") << " and is not in " << v11n << " versification, ignoring" << endl;
+					std::cout << identifyMsg("WARNING", "V11N", token.getAttribute("osisID"))
+						  << "New book is not in "
+						  << v11n
+						  << " versification, ignoring"
+						  << std::endl;
 				}
 				else if (debug & DEBUG_OTHER) {
-					cout << "DEBUG(FOUND): New book is " << currentVerse.getOSISRef() << endl;
+					std::cout << identifyMsg("DEBUG", "FOUND", currentVerse.getOSISRef())
+						  << "Found new book"
+						  << std::endl;
 				}
 
 				return false;
@@ -754,17 +1050,25 @@ bool handleToken(SWBuf &text, XMLTag token) {
 			) {
 				if (inBookIntro) {
 					if (debug & DEBUG_TITLE) {
-						cout << "DEBUG(TITLE): " << currentOsisID << ": BOOK INTRO "<< text << endl;
+						std::cout << identifyMsg("DEBUG", "TITLE", currentOsisID)
+							  << "BOOK INTRO "
+							  << text
+							  << std::endl;
 					}
 
 					writeEntry(text);
+
+					inBookIntro     = false;
 				}
 
 				currentVerse = token.getAttribute("osisID");
 				currentVerse.setVerse(0);
 
 				if (debug & DEBUG_OTHER) {
-					cout << "DEBUG(FOUND): Current chapter is " << currentVerse.getOSISRef() << " (" << token.getAttribute("osisID") << ")" << endl;
+					std::cout << identifyMsg("DEBUG", "FOUND", currentVerse.getOSISRef())
+						  << "Current chapter is "
+						  << token.getAttribute("osisID")
+						  << std::endl;
 				}
 
 				strcpy(currentOsisID, currentVerse.getOSISRef());
@@ -773,11 +1077,12 @@ bool handleToken(SWBuf &text, XMLTag token) {
 				inChapter       = true;
 				inVerse         = false;
 				inPreVerse      = false;
-				inBookIntro     = false;
 				inChapterIntro  = true;
 
 				if (debug & DEBUG_TITLE) {
-					cout << "DEBUG(TITLE): " << currentOsisID << ": Looking for chapter introduction" << endl;
+					std::cout << identifyMsg("DEBUG", "TITLE", currentOsisID)
+						  << "Looking for chapter introduction"
+						  << std::endl;
 				}
 
 				chapterDepth    = tagStack.size();
@@ -790,18 +1095,19 @@ bool handleToken(SWBuf &text, XMLTag token) {
 			if ((tokenName == "verse") ||
 			    (tokenName == "div" && token.getAttribute("annotateType"))
 			) {
-				if (debug & DEBUG_OTHER) {
-					cout << "DEBUG(FOUND): Entering verse" << endl;
-				}
-
 				if (inChapterIntro) {
 					if (debug & DEBUG_TITLE) {
-						cout << "DEBUG(TITLE): " << currentOsisID << ": Done looking for chapter introduction" << endl;
+						std::cout << identifyMsg("DEBUG", "TITLE", currentOsisID)
+							  << "Done looking for chapter introduction"
+							  << std::endl;
 					}
 
 					if (text.length()) {
 						if (debug & DEBUG_TITLE) {
-							cout << "DEBUG(TITLE): " << currentOsisID << ": CHAPTER INTRO "<< text << endl;
+							std::cout << identifyMsg("DEBUG", "TITLE", currentOsisID)
+								  << "CHAPTER INTRO "
+								  << text
+								  << std::endl;
 						}
 
 						writeEntry(text);
@@ -816,7 +1122,14 @@ bool handleToken(SWBuf &text, XMLTag token) {
 				}
 
 				// Get osisID for verse or annotateRef for commentary
-				SWBuf keyVal = token.getAttribute(tokenName == "verse" ? "osisID" : "annotateRef");
+				SWBuf refVal = token.getAttribute(tokenName == "verse" ? "osisID" : "annotateRef");
+				SWBuf keyVal = refVal;
+
+				if (debug & DEBUG_OTHER) {
+					std::cout << identifyMsg("DEBUG", "FOUND", refVal.c_str())
+						  << "Entering verse"
+						  << std::endl;
+				}
 
 				// Massage the key into a form that parseVerseList can accept
 				prepareSWVerseKey(keyVal);
@@ -838,19 +1151,23 @@ bool handleToken(SWBuf &text, XMLTag token) {
 					if (!verseKeys.popError()) {
 						// If it does, save it until all verses have been seen.
 						// At that point we will output links.
-						cout << "DEBUG(LINK MASTER): " << currentVerse.getOSISRef() << endl;
+						std::cout << identifyMsg("DEBUG", "LINK MASTER", currentVerse.getOSISRef())
+							  << std::endl;
 						linkedVerses.push_back(verseKeys);
 					}
 				}
 				else {
-					cout << "ERROR(REF): Invalid osisID/annotateRef: " << token.getAttribute((tokenName == "verse") ? "osisID" : "annotateRef") << endl;
+					std::cout << identifyMsg("ERROR", "REF", refVal)
+						  << "Invalid osisID/annotateRef"
+						  << std::endl;
 				}
 
 				strcpy(currentOsisID, currentVerse.getOSISRef());
 
 				if (debug & DEBUG_OTHER) {
-					cout << "DEBUG(FOUND): New current verse is " << currentVerse.getOSISRef() << endl;
-					cout << "DEBUG(FOUND): osisID/annotateRef is adjusted to: " << keyVal << endl;
+					std::cout << identifyMsg("DEBUG", "FOUND", currentOsisID)
+						  << "New current verse"
+						  << std::endl;
 				}
 
 				sidVerse        = token.getAttribute("sID");
@@ -886,39 +1203,34 @@ bool handleToken(SWBuf &text, XMLTag token) {
 
 		// Now consider everything else.
 
-/*
-		// "majorSection" is code for the Book 1-5 of Psalms // This is incorrect assumption - majorSection can appear in any large book and can start and end inside chapters
-		if (tokenName == "div" && typeAttr == "majorSection") {
-			if (inBookIntro) {
-				if (debug & DEBUG_TITLE) {
-					cout << "DEBUG(TITLE): " << currentOsisID << ": BOOK INTRO "<< text << endl;
-				}
-				writeEntry(text);
-			}
-
-			if (debug & DEBUG_OTHER) {
-				cout << "DEBUG(FOUND): majorSection found " << currentVerse.getOSISRef() << endl;
-			}
-
-			strcpy(currentOsisID, currentVerse.getOSISRef());
-
-// as a result of the incorrect assumption these flags are set also incorrectly and cause problems in situations where majorSections do not follow the assumptions made during creation of this patch
-
-			inChapter       = false;
-			inVerse         = false;
-			inPreVerse      = false;
-			inBookIntro     = false;
-			inChapterIntro  = true;
-
-			if (debug & DEBUG_TITLE) {
-				cout << "DEBUG(TITLE): " << currentOsisID << ": Looking for chapter introduction" << endl;
-			}
-
-			verseDepth      = 0;
-
+		// The module intro consists of divs that are not book or bookGroup
+		// Do we need to consider other divs that can surround books?
+		if (inModuleIntro && tokenName == "div" && typeAttr != "bookGroup" && typeAttr != "book") {
+			// keep collecting
 			return false;
 		}
-*/
+
+		// The presence of a bookGroup will close a module intro
+		// Do we need to consider other divs that can surround books?
+		if (tokenName == "div" && typeAttr == "bookGroup") {
+			if (inModuleIntro) {
+				// Setting the testament will set Book, Chapter and Verse to 0
+				currentVerse.setTestament(0);
+
+				if (debug & DEBUG_TITLE) {
+					std::cout << identifyMsg("DEBUG", "TITLE", currentVerse)
+						  << "MODULE INTRO "
+						  << text
+						  << std::endl;
+				}
+
+				writeEntry(text);
+
+				inModuleIntro = false;
+			}
+			return false;
+		}
+
 		// Handle WOC quotes.
 		// Note this requires transformBSP to make them into milestones
 		// Otherwise have to do it here
@@ -926,7 +1238,12 @@ bool handleToken(SWBuf &text, XMLTag token) {
 			quoteStack.push(token);
 
 			if (debug & DEBUG_QUOTE) {
-				cout << "DEBUG(QUOTE): " << currentOsisID << ": quote top(" << quoteStack.size() << ") " << token << endl;
+				std::cout << identifyMsg("DEBUG", "QUOTE", currentOsisID)
+					  << "Quote top("
+					  << quoteStack.size()
+					  << ") "
+					  << token
+					  << std::endl;
 			}
 
 			if (token.getAttribute("who") && !strcmp(token.getAttribute("who"), "Jesus")) {
@@ -954,28 +1271,35 @@ bool handleToken(SWBuf &text, XMLTag token) {
 		// 1) Between the opening of a book and the first chapter, all the material is handled as an introduction to the book.
 		// 2) Between the opening of a chapter and the first verse, the material is split between the introduction of the chapter
 		//    and the first verse of the chapter.
-		//    A <div> with a type of section will be taken as surrounding verses.
+		//    A <div> with a type of section, subSection or majorSection when the subType isn't x-introduction
+		//      will be taken as surrounding verses.
 		//    A <title> of type other than main, chapter or sub, will be taken as a title for the verse.
 		//    Once one of these conditions is met, the division between chapter introduction and pre-verse is set.
 		// 3) Between verses, the material is split between the prior verse and the next verse.
 		//    Basically, while end and empty tags are found, they belong to the prior verse.
 		//    Once a begin tag is found, it belongs to the next verse.
-		if (!inPreVerse && !inBookIntro) {
+		if (inChapter && !inPreVerse) {
 			if (inChapterIntro) {
+				SWBuf subTypeAttr = token.getAttribute("subType");
 				// Determine when we are no longer in a chapter heading, but in pre-verse material:
 				// If we see one of the following:
-				//     a section div
+				//     a section, subSection, majorSection div that's not marked with a subType of "x-introduction"
 				//     a title that is not main, chapter or sub or unclassified (no type attribute)
-				if ((tokenName == "div" && typeAttr == "section") ||
+				if ((tokenName == "div" && (typeAttr == "section" || typeAttr == "subSection" || typeAttr == "majorSection") && subTypeAttr != "x-introduction") ||
 				    (tokenName == "title" && typeAttr.length() != 0 && typeAttr != "main" && typeAttr != "chapter" && typeAttr != "sub")
 				) {
 					if (debug & DEBUG_TITLE) {
-						cout << "DEBUG(TITLE): " << currentOsisID << ": Done looking for chapter introduction" << endl;
+						std::cout << identifyMsg("DEBUG", "TITLE", currentOsisID)
+							  << "Done looking for chapter introduction"
+							  << std::endl;
 					}
 
 					if (text.length()) {
 						if (debug & DEBUG_TITLE) {
-							cout << "DEBUG(TITLE): " << currentOsisID << ": CHAPTER INTRO "<< text << endl;
+							std::cout << identifyMsg("DEBUG", "TITLE", currentOsisID)
+								  << "CHAPTER INTRO "
+								  << text
+								  << std::endl;
 						}
 
 						// Since we have found the boundary, we need to write out the chapter heading
@@ -999,8 +1323,13 @@ bool handleToken(SWBuf &text, XMLTag token) {
 		}
 
 		if (debug & DEBUG_INTERVERSE) {
-			if (!inVerse && !inBookIntro && !inChapterIntro) {
-				cout << "DEBUG(INTERVERSE): " << currentOsisID << ": interverse start token " << token << ":" << text.c_str() << endl;
+			if (!inVerse && inChapter) {
+				std::cout << identifyMsg("DEBUG", "INTERVERSE", currentOsisID)
+					<< "Interverse start token "
+					<< token
+					<< ":"
+					<< text.c_str()
+					<< std::endl;
 			}
 		}
 
@@ -1011,7 +1340,9 @@ bool handleToken(SWBuf &text, XMLTag token) {
 	else {
 
 		if (tagStack.empty()) {
-			cout << "FATAL(NESTING): " << currentOsisID << ": tag expected" << endl;
+			std::cout << identifyMsg("FATAL", "NESTING", currentOsisID)
+				  << "End tag expected"
+				  << std::endl;
 			exit(EXIT_BAD_NESTING);
 		}
 
@@ -1021,13 +1352,23 @@ bool handleToken(SWBuf &text, XMLTag token) {
 			tagDepth = tagStack.size();
 
 			if (debug & DEBUG_STACK) {
-				cout << "DEBUG(STACK): " << currentOsisID << ": pop(" << tagDepth << ") " << topToken.getName() << endl;
+				std::cout << identifyMsg("DEBUG", "STACK", currentOsisID)
+					  << "Pop("
+					  << tagDepth
+					  << ") "
+					  << topToken
+					  << std::endl;
 			}
 
 			tagStack.pop();
 
 			if (tokenName != topToken.getName()) {
-				cout << "FATAL(NESTING): " << currentOsisID << ": Expected " << topToken.getName() << " found " << tokenName << endl;
+				std::cout << identifyMsg("FATAL", "NESTING", currentOsisID)
+					  << "Expected "
+					  << topToken.getName()
+					  << " found "
+					  << tokenName
+					  << std::endl;
 //				exit(EXIT_BAD_NESTING); // (OSK) I'm sure this validity check is a good idea, but there's a bug somewhere that's killing the converter here.
 						// So I'm disabling this line. Unvalidated OSIS files shouldn't be run through the converter anyway.
 						// (DM) This has nothing to do with well-form or valid. It checks milestoned elements for proper nesting.
@@ -1035,12 +1376,14 @@ bool handleToken(SWBuf &text, XMLTag token) {
 		}
 
 		// We haven't seen the first div outside the header so there is little to do.
-		if (!firstDiv) {
+		if (!inModule) {
 			if (tokenName == "header") {
 				headerEnded = true;
 
 				if (debug & DEBUG_OTHER) {
-					cout << "DEBUG(FOUND): End of header found" << endl;
+					std::cout << identifyMsg("DEBUG", "FOUND")
+						  << "End of header found"
+						  << std::endl;
 				}
 			}
 
@@ -1054,14 +1397,17 @@ bool handleToken(SWBuf &text, XMLTag token) {
 		) {
 
 			if (tagDepth != verseDepth) {
-				cout << "WARNING(NESTING): verse " << currentOsisID << " is not well formed:(" << verseDepth << "," << tagDepth << ")" << endl;
+				std::cout << identifyMsg("WARNING", "NESTING", currentOsisID)
+					  << "Verse is not well formed."
+					  << " verseDepth=" << verseDepth
+					  << " tagDepth=" << tagDepth
+					  << std::endl;
 			}
 
 			// If we are in WOC then we need to terminate the <q who="Jesus" marker=""> that was added earlier in the verse.
 			if (inWOC) {
 				text.append("</q>");
 			}
-
 
 			// Include the token if it is not a verse
 			if (tokenName != "verse") {
@@ -1088,7 +1434,7 @@ bool handleToken(SWBuf &text, XMLTag token) {
 
 			return true;
 		}
-		
+
 		// Handle WOC quotes.
 		// Note this requires transformBSP to make them into milestones
 		// Otherwise have to manage it here
@@ -1096,7 +1442,10 @@ bool handleToken(SWBuf &text, XMLTag token) {
 			XMLTag topToken = quoteStack.top();
 
 			if (debug & DEBUG_QUOTE) {
-				cout << "DEBUG(QUOTE): " << currentOsisID << ": quote pop(" << quoteStack.size() << ") " << topToken << " -- " << token << endl;
+				std::cout << identifyMsg("DEBUG", "QUOTE", currentOsisID)
+					  << "Quote pop(" << quoteStack.size() << ") "
+					  << topToken << " -- " << token
+					  << std::endl;
 			}
 
 			quoteStack.pop();
@@ -1106,7 +1455,10 @@ bool handleToken(SWBuf &text, XMLTag token) {
 			if (token.getAttribute("who") && !strcmp(token.getAttribute("who"), "Jesus")) {
 
 				if (debug & DEBUG_QUOTE) {
-					cout << "DEBUG(QUOTE): " << currentOsisID << ": (" << quoteStack.size() << ") " << topToken << " -- " << token << endl;
+					std::cout << identifyMsg("DEBUG", "QUOTE", currentOsisID)
+						  << "(" << quoteStack.size() << ") "
+						  << topToken << " -- " << token
+						  << std::endl;
 				}
 
 				inWOC = false;
@@ -1119,9 +1471,11 @@ bool handleToken(SWBuf &text, XMLTag token) {
 					eID = "";
 				}
 				if (strcmp(sID, eID)) {
-					cout << "ERROR(NESTING): improper nesting " << currentOsisID << ": matching (sID,eID) not found. Looking at (" << sID << "," << eID << ")" << endl;
+					std::cout << identifyMsg("ERROR", "NESTING", currentOsisID)
+						  << "Improper nesting. Matching (sID,eID) not found. Looking at ("
+						  << sID << "," << eID << ")"
+						  << std::endl;
 				}
-
 
 				// Output the quotation mark if appropriate, inside the WOC.
 				// If there is no marker attribute, let the SWORD engine manufacture one.
@@ -1140,9 +1494,10 @@ bool handleToken(SWBuf &text, XMLTag token) {
 			return false;
 		}
 
+		bool inIntro = inModuleIntro || inBookIntro || inChapterIntro;
 		// Look for the end of document, book and chapter
 		// Also for material that goes with last entry
-		if (!inVerse && !inBookIntro && !inChapterIntro) {
+		if (!inVerse && !inIntro) {
 			// Is this the end of a chapter.
 			if ((tokenName == "chapter") ||
 			    (tokenName == "div" && eidAttr == sidChapter)
@@ -1163,6 +1518,14 @@ bool handleToken(SWBuf &text, XMLTag token) {
 				bookDepth    = 0;
 				chapterDepth = 0;
 				verseDepth   = 0;
+				inBook       = false;
+				return true;
+			}
+
+			// Do we need to consider other divs that can surround books?
+			if (tokenName == "div" && typeAttr == "bookGroup") {
+				text.append(token);
+				writeEntry(text);
 				return true;
 			}
 
@@ -1171,24 +1534,41 @@ bool handleToken(SWBuf &text, XMLTag token) {
 				bookDepth    = 0;
 				chapterDepth = 0;
 				verseDepth   = 0;
-				text         = "";
 				return true;
 			}
 
-			// When we are not inPreVerse, the interverse tags get appended to the preceeding verse.
-			if (!inPreVerse) {
+			// Within a book, when we are not inPreVerse, the interverse tags get appended to the preceeding verse.
+			if (!inPreVerse && inBook) {
 				text.append(token);
 				writeEntry(text);
 
 				if (debug & DEBUG_INTERVERSE) {
-					cout << "DEBUG(INTERVERSE): " << currentOsisID << ": appending interverse end tag: " << tokenName << "(" << tagDepth << "," << chapterDepth << "," << bookDepth << ")" << endl;
+					std::cout << identifyMsg("DEBUG", "INTERVERSE", currentOsisID)
+						  << "Appending interverse end tag: "
+						  << token
+						  << " tagDepth="
+						  << tagDepth
+						  << " chapterDepth="
+						  << chapterDepth
+						  << " bookDepth="
+						  << bookDepth
+						  << std::endl;
 				}
 
 				return true;
 			}
 
 			if (debug & DEBUG_INTERVERSE) {
-				cout << "DEBUG(INTERVERSE): " << currentOsisID << ": interverse end tag: " << tokenName << "(" << tagDepth << "," << chapterDepth << "," << bookDepth << ")" << endl;
+				std::cout << identifyMsg("DEBUG", "INTERVERSE", currentOsisID)
+					  << "Interverse end tag: "
+					  << token
+					  << " tagDepth="
+					  << tagDepth
+					  << " chapterDepth="
+					  << chapterDepth
+					  << " bookDepth="
+					  << bookDepth
+					  << std::endl;
 			}
 
 			return false;
@@ -1220,21 +1600,19 @@ XMLTag transformBSP(XMLTag t) {
 
 	// Support simplification transformations
 	if (t.isEmpty()) {
-
-		if (debug & DEBUG_XFORM) {
-			cout << "DEBUG(XFORM): " << currentOsisID << ": xform empty " << t << endl;
-		}
-
 		return t;
 	}
 
 	SWBuf tagName = t.getName();
+	XMLTag orig = t;
+	bool changed = false;
 	if (!t.isEndTag()) {
 		// Transform <p> into <div type="x-p"> and milestone it
 		if (tagName == "p") {
 			t.setText("<div type=\"x-p\" />");
 			sprintf(buf, "gen%d", sID++);
 			t.setAttribute("sID", buf);
+			changed = true;
 		}
 
 		// Transform <tag> into <tag  sID="">, where tag is a milestoneable element.
@@ -1257,23 +1635,39 @@ XMLTag transformBSP(XMLTag t) {
 			 tagName == "verse"
 		) {
 			t.setEmpty(true);
-			sprintf(buf, "gen%d", sID++);
-			t.setAttribute("sID", buf);
+			if (tagName == "verse" || tagName == "chapter" || (tagName == "div" && typeAttr == "book")) {
+				t.setAttribute("sID", t.getAttribute("osisID"));
+			}
+			else {
+				sprintf(buf, "gen%d", sID++);
+				t.setAttribute("sID", buf);
+			}
+			changed = true;
 		}
 		bspTagStack.push(t);
 
-		if (debug & DEBUG_XFORM) {
-			cout << "DEBUG(XFORM): " << currentOsisID << ": xform push (" << bspTagStack.size() << ") " << t << " (tagname=" << tagName << ")" << endl;
-			XMLTag topToken = bspTagStack.top();
-			cout << "DEBUG(XFORM): " << currentOsisID << ": xform top(" << bspTagStack.size() << ") " << topToken << endl;
+		if (changed && debug & DEBUG_XFORM) {
+			std::cout << identifyMsg("DEBUG", "XFORM", currentOsisID)
+				  << "Transform start tag from "
+				  << orig
+				  << " to "
+				  << t
+				  << std::endl;
 		}
 	}
 	else {
 		if (!bspTagStack.empty()) {
 			XMLTag topToken = bspTagStack.top();
 
-			if (debug & DEBUG_XFORM) {
-				cout << "DEBUG(XFORM): " << currentOsisID << ": xform pop(" << bspTagStack.size() << ") " << topToken << endl;
+			// <p> is transformed to <div ...>
+			if (tagName != "p" && strcmp(tagName, topToken.getName())) {
+				std::cout << identifyMsg("FATAL", "XFORM", currentOsisID)
+					  << "Closing tag ("
+					  << tagName
+					  << ") does not match opening tag ("
+					  << topToken.getName()
+					  << ")"
+					  << std::endl;
 			}
 
 			bspTagStack.pop();
@@ -1298,10 +1692,22 @@ XMLTag transformBSP(XMLTag t) {
 				t = topToken;
 				t.setAttribute("eID", t.getAttribute("sID"));
 				t.setAttribute("sID", 0);
+				changed = true;
+			}
+
+			if (changed && debug & DEBUG_XFORM) {
+				std::cout << identifyMsg("DEBUG", "XFORM", currentOsisID)
+					  << "Transform end tag from "
+					  << orig
+					  << " to "
+					  << t
+					  << std::endl;
 			}
 		}
 		else {
-			cout << "FATAL(TAGSTACK): " << currentOsisID << ": closing tag without opening tag" << endl;
+			std::cout << identifyMsg("FATAL", "XFORM", currentOsisID)
+				  << "Closing tag without opening tag"
+				  << std::endl;
 		}
 	}
 
@@ -1324,14 +1730,14 @@ void writeLinks()
 {
 	// Link all the verses
 	VerseKey destKey;
-	destKey.setVersificationSystem(currentVerse.getVersificationSystem());
-	destKey.setAutoNormalize(0);
-	destKey.setIntros(1);
+	destKey.setVersificationSystem(v11n);
+	destKey.setAutoNormalize(false);
+	destKey.setIntros(true);
 
 	VerseKey linkKey;
-	linkKey.setVersificationSystem(currentVerse.getVersificationSystem());
-	linkKey.setAutoNormalize(0);
-	linkKey.setIntros(1);
+	linkKey.setVersificationSystem(v11n);
+	linkKey.setAutoNormalize(false);
+	linkKey.setIntros(true);
 	for (unsigned int i = 0; i < linkedVerses.size(); i++) {
 		// The verseKeys is a list of verses
 		// where the first is the real verse
@@ -1364,7 +1770,7 @@ void usage(const char *app, const char *error = 0, const bool verboseHelp = fals
 	fprintf(stderr, "  -b <2|3|4>\t\t compression block size (default: 4)\n");
 	fprintf(stderr, "\t\t\t\t 2 - verse; 3 - chapter; 4 - book\n");
 	fprintf(stderr, "  -l <1-9>\t\t compression level (default varies by compression type)\n");
-	fprintf(stderr, "  -c <cipher_key>\t encipher module using supplied key\n");
+	fprintf(stderr, "  -c <cipher_key>\t encipher a compressed module using supplied key\n");
 	fprintf(stderr, "\t\t\t\t (default no enciphering)\n");
 
 #ifdef _ICU_
@@ -1382,9 +1788,11 @@ void usage(const char *app, const char *error = 0, const bool verboseHelp = fals
 	if (verboseHelp) {
 		fprintf(stderr, "\t\t\t\t Note: useful for commentaries with very large\n");
 		fprintf(stderr, "\t\t\t\t entries in uncompressed modules\n");
+		fprintf(stderr, "\t\t\t\t or in Bibles with large introductions\n");
 		fprintf(stderr, "\t\t\t\t (2 bytes to store size equal 65535 characters)\n");
 	}
 	fprintf(stderr, "  -v <v11n>\t\t specify a versification scheme to use (default is KJV)\n");
+	fprintf(stderr, "\t\t\t\t Note: This is case insensitive and allows unique prefixes, e.g. cal for Calvin\n");
 	fprintf(stderr, "\t\t\t\t Note: The following are valid values for v11n:");
 
 	VersificationMgr *vmgr = VersificationMgr::getSystemVersificationMgr();
@@ -1414,6 +1822,7 @@ void usage(const char *app, const char *error = 0, const bool verboseHelp = fals
 		fprintf(stderr, "\t\t\t\t\t128 - parsing of osisID and osisRef\n");
 		fprintf(stderr, "\t\t\t\t\t256 - internal stack\n");
 		fprintf(stderr, "\t\t\t\t\t512 - miscellaneous\n");
+		fprintf(stderr, "\t\t\t\t\t1024 - parsing of numeric and character entities and comments.\n");
 		fprintf(stderr, "\t\t\t\t This argument can be used more than once. (Or\n");
 		fprintf(stderr, "\t\t\t\t the flags may be added together.)\n");
 	}
@@ -1425,26 +1834,544 @@ void usage(const char *app, const char *error = 0, const bool verboseHelp = fals
 	exit(EXIT_BAD_ARG);
 }
 
-void processOSIS(istream& infile) {
-	typedef enum {
-		CS_NOT_IN_COMMENT,            // or seen starting "<"
-		CS_SEEN_STARTING_EXCLAMATION,
-		CS_SEEN_STARTING_HYPHEN,
-		CS_IN_COMMENT,
-		CS_SEEN_ENDING_HYPHEN,
-		CS_SEEN_SECOND_ENDING_HYPHEN,
-		CS_SEEN_ENDING_GREATER_THAN
-	} t_commentstate;
+// Maximum length for an entity (including & and ;), sufficient for valid XML/HTML entities
+constexpr size_t MAX_ENTITY_LENGTH = 32;
 
-	typedef enum {
-		ET_NUM,
-		ET_HEX,
-		ET_CHAR,
-		ET_NONE,
-		ET_ERR
-	} t_entitytype;
+// Enum for entity types
+enum class EntityType { START, NUM_HASH, NUM_DEC, NUM_HEX, CHAR, ERR };
 
-	activeOsisID[0] = '\0';
+enum class CommentState {
+	START,         // Not in a comment or have seen '<'
+	SLAM,          // Seen '<!'
+	DASH1,         // Seen '<!-'
+	COMMENT,       // Having seen '<--' inside comment content
+	END_DASH1,     // Seen '-' in comment
+	END_DASH2      // Seen '--' in comment
+};
+
+/**
+ * @brief Handles XML comment parsing for a single character at a time.
+ * @param c The current character to process.
+ * @param currentOsisID The current OSIS ID for error reporting.
+ * @param incomment Whether currently inside a comment.
+ * @param commentstate The current comment parsing state.
+ * @param token The token buffer to append characters during comment start.
+ * @return true if the character is consumed (continue loop), false otherwise.
+ */
+bool handleComment(unsigned char c, const char* currentOsisID, bool& intoken, bool& incomment, CommentState& commentstate, SWBuf& token) {
+	if (!incomment) {
+		switch (commentstate) {
+		case CommentState::START:
+			if (c == '!') {
+				if (debug & DEBUG_PARSE) {
+					std::cout << identifyMsg("DEBUG", "COMMENTS")
+						  << "Found <!"
+						  << std::endl;
+				}
+				commentstate = CommentState::SLAM;
+				token.append((char)c);
+				return true;
+			}
+			return false;
+
+		case CommentState::SLAM:
+			if (c == '-') {
+				if (debug & DEBUG_PARSE) {
+					std::cout << identifyMsg("DEBUG", "COMMENTS")
+						  << "Found <!-"
+						  << std::endl;
+				}
+				commentstate = CommentState::DASH1;
+				token.append((char)c);
+				return true;
+			}
+			commentstate = CommentState::START;
+			return false;
+
+		case CommentState::DASH1:
+			if (c == '-') { // having seen the second dash we are in the comment
+				if (debug & DEBUG_PARSE) {
+					std::cout << identifyMsg("DEBUG", "COMMENTS")
+						  << "Found <!-- Now in comment."
+						  << std::endl;
+				}
+				incomment = true;
+				commentstate = CommentState::COMMENT;
+				token.append((char)c);
+				if (debug & DEBUG_PARSE) {
+					std::cout << identifyMsg("DEBUG", "COMMENTS")
+						  << "In comment"
+						  << std::endl;
+				}
+				return true;
+			}
+			commentstate = CommentState::START;
+			return false;
+
+		default:
+			std::cout << identifyMsg("FATAL", "COMMENTS")
+				  << "Unknown commentstate on comment start: "
+				  << (int) commentstate
+				  << std::endl;
+			exit(EXIT_BAD_COMMENT);
+		}
+	}
+	else {
+		switch (commentstate) {
+		case CommentState::COMMENT:
+			if (c == '-') {
+				if (debug & DEBUG_PARSE) {
+					std::cout << identifyMsg("DEBUG", "COMMENTS")
+						  << "Found - in comment."
+						  << std::endl;
+				}
+				commentstate = CommentState::END_DASH1;
+				return true;
+			}
+			// Ignore the character
+			return true;
+
+		case CommentState::END_DASH1:
+			if (c == '-') {
+				if (debug & DEBUG_PARSE) {
+					std::cout << identifyMsg("DEBUG", "COMMENTS")
+						  << "Found -- in comment."
+						  << std::endl;
+				}
+				commentstate = CommentState::END_DASH2;
+				return true;
+			}
+			// Ignore the character
+			commentstate = CommentState::COMMENT;
+			return true;
+
+		case CommentState::END_DASH2:
+			if (c == '>') { // having seen the --> we are done and return to the original state
+				if (debug & DEBUG_PARSE) {
+					std::cout << identifyMsg("DEBUG", "COMMENTS")
+						  << "Found --> comment ended."
+						  << std::endl;
+				}
+				intoken = false;
+				incomment = false;
+				commentstate = CommentState::START;
+				if (debug & DEBUG_PARSE) {
+					std::cout << identifyMsg("DEBUG", "COMMENTS")
+						  << "Out of comment"
+						  << std::endl;
+				}
+				return true;
+			}
+			// Ignore the character
+			commentstate = CommentState::COMMENT;
+			return true;
+
+		default:
+			std::cout << identifyMsg("FATAL", "COMMENTS")
+				  << "Unknown commentstate on comment end: "
+				  << (int) commentstate
+				  << std::endl;
+			exit(EXIT_BAD_COMMENT);
+		}
+	}
+	return false; // Should never reach here
+}
+
+/**
+ * \brief Handles &apos; and &quot; entities, converting them to plain characters or keeping them based on attribute context.
+ *
+ * This function processes `&apos;` and `&quot;` entities, replacing them with `'` or `"` respectively when outside attributes
+ * or when used in attributes with non-matching quote characters (e.g., `&apos;` in a double-quoted attribute). It logs
+ * appropriate warning messages and updates the entityToken with the converted value.
+ *
+ * \param entityToken [in/out] The entity string (e.g., "&apos;" or "&quot;") to process; modified to the converted value (e.g., "'" or "&apos;").
+ * \param currentOsisID [in] The OSIS ID for context in warning messages.
+ * \param msgPrefix [in] Pre-formatted message prefix for logging (includes level, type, and OSIS ID).
+ * \param inattribute [in] True if the entity is within an attribute value, false otherwise.
+ * \param attrQuoteChar [in] The quote character (' or ") used in the attribute, or '\0' if not applicable.
+ * \param debug [in] Debug flags from osis2mod; logs if (debug & DEBUG_PARSE) is set.
+ *
+ * \note Logs warnings to std::cout if (debug & DEBUG_PARSE).
+ * \note Thread-safe as it does not modify shared state beyond std::cout.
+ */
+void handleQuoteEntity(SWBuf& entityToken, const char* currentOsisID, SWBuf& msgPrefix, bool inattribute, char attrQuoteChar) {
+	if (entityToken == "&apos;") {
+		if (!inattribute) {
+			if (debug & DEBUG_PARSE) {
+				std::cout << msgPrefix
+					  << "&apos; unnecessary outside attributes. Replacing with '."
+					  << std::endl;
+			}
+			entityToken = "'";
+		}
+		else if (attrQuoteChar == '"') {
+			if (debug & DEBUG_PARSE) {
+				std::cout << msgPrefix
+					  << "&apos; unnecessary in double-quoted attributes. Replacing with '."
+					  << std::endl;
+			}
+			entityToken = "'";
+		}
+		else if (attrQuoteChar == '\'') {
+			if (debug & DEBUG_PARSE) {
+				std::cout << msgPrefix
+					  << "&apos; only needed in single-quoted attributes. Consider double quotes." 
+					  << std::endl;
+			}
+		}
+		else {
+			if (debug & DEBUG_PARSE) {
+				std::cout << identifyMsg("ERROR", "PARSE", currentOsisID)
+					  << "Invalid attrQuoteChar: "
+				 	  << attrQuoteChar
+					  << std::endl;
+			}
+		}
+	}
+	else if (entityToken == "&quot;") {
+		if (!inattribute) {
+			if (debug & DEBUG_PARSE) {
+				std::cout << msgPrefix
+					  << "&quot; unnecessary outside attributes. Replacing with \"." 
+					  << std::endl;
+			}
+			entityToken = "\"";
+		}
+		else if (attrQuoteChar == '\'') {
+			if (debug & DEBUG_PARSE) {
+				std::cout << msgPrefix
+					  << "&quot; unnecessary in single-quoted attributes. Replacing with \"." 
+					  << std::endl;
+			}
+			entityToken = "\"";
+		}
+		else if (attrQuoteChar == '"') {
+			if (debug & DEBUG_PARSE) {
+				std::cout << msgPrefix
+			  		  << "&quot; only needed in double-quoted attributes. Consider single quotes."
+					  << std::endl;
+			}
+		}
+		else {
+			if (debug & DEBUG_PARSE) {
+				std::cout << identifyMsg("ERROR", "PARSE", currentOsisID)
+					  << "Invalid attrQuoteChar: " 
+					  << attrQuoteChar 
+					  << std::endl;
+			}
+		}
+	}
+}
+
+/**
+ * \brief Converts a validated Unicode code point to its UTF-8 representation.
+ *
+ * This function takes a pre-parsed Unicode code point (1 to 0x10FFFF) and converts it to its UTF-8 encoded form,
+ * storing the result in entityToken. It handles single-byte, two-byte, three-byte, and four-byte UTF-8 sequences
+ * based on the code point value. The original entity string is provided for diagnostic logging.
+ *
+ * \param entityToken [in/out] The original entity string (e.g., "&#65;") for logging; modified to contain the UTF-8 encoded character(s).
+ * \param codepoint [in] The Unicode code point (1 to 0x10FFFF) to convert to UTF-8.
+ * \param msgPrefix [in] Pre-formatted message prefix for logging (includes level, type, and OSIS ID).
+ *
+ * \return Always returns true, as the codepoint is assumed to be valid.
+ *
+ * \note The codepoint must be pre-validated (1 to 0x10FFFF) by the caller to avoid undefined behavior.
+ * \note Logs conversion details to std::cout if (debug & DEBUG_PARSE).
+ * \note Thread-safe as it does not modify shared state beyond std::cout.
+ */
+void convertNumericEntityToUTF8(SWBuf& entityToken, long codepoint, SWBuf& msgPrefix) {
+	// Save original entity for logging
+	SWBuf originalEntity = entityToken;
+
+	// Convert to UTF-8
+	if (codepoint <= 0x7F) {
+		entityToken.setSize(1);
+		entityToken[0] = static_cast<char>(codepoint);
+	}
+	else if (codepoint <= 0x7FF) {
+		entityToken.setSize(2);
+		entityToken[0] = 0xC0 | (codepoint >> 6);
+		entityToken[1] = 0x80 | (codepoint & 0x3F);
+	}
+	else if (codepoint <= 0xFFFF) {
+		entityToken.setSize(3);
+		entityToken[0] = 0xE0 | (codepoint >> 12);
+		entityToken[1] = 0x80 | ((codepoint >> 6) & 0x3F);
+		entityToken[2] = 0x80 | (codepoint & 0x3F);
+	}
+	else {
+		entityToken.setSize(4);
+		entityToken[0] = 0xF0 | (codepoint >> 18);
+		entityToken[1] = 0x80 | ((codepoint >> 12) & 0x3F);
+		entityToken[2] = 0x80 | ((codepoint >> 6) & 0x3F);
+		entityToken[3] = 0x80 | (codepoint & 0x3F);
+	}
+	if (debug & DEBUG_PARSE) {
+		std::cout << msgPrefix
+			  << "Converted numeric entity "
+			  << originalEntity
+			  << " to UTF-8 character "
+			  << entityToken
+			  << std::endl;
+	}
+}
+
+/**
+ * \brief Parses and processes XML/HTML entities in a character stream using a finite state automaton.
+ *
+ * This function processes a single character in the context of an XML/HTML entity, maintaining a finite state automaton
+ * to track entity parsing states (START, NUM_HASH, NUM_DEC, NUM_HEX, CHAR, ERR). It handles named entities (e.g., &amp;),
+ * numeric entities (e.g., &#65;, &#x41;), and malformed entities. Special numeric entities (e.g., &#38; to &amp;) are
+ * converted to named entities, while others are converted to UTF-8. The function updates the entityToken and appends
+ * results to either the text or token buffer based on intoken. Malformed entities are replaced with &amp; followed by
+ * the invalid sequence.
+ *
+ * \param curChar [in] The current character to process.
+ * \param inentity [in/out] True if currently parsing an entity (starts with '&'), false otherwise.
+ * \param inWhitespace [in/out] True if the parser is in a whitespace sequence, reset when an entity starts.
+ * \param entitytype [in/out] The current state of the entity parser (START, NUM_HASH, NUM_DEC, NUM_HEX, CHAR, ERR).
+ * \param entityToken [in/out] The current entity being built (e.g., "&amp;" or "&#65;"); modified with the converted value.
+ * \param token [in/out] Buffer for entity output if intoken is true (e.g., within a tag).
+ * \param text [in/out] Buffer for entity output if intoken is false (e.g., plain text).
+ * \param intoken [in] True if the entity is within a token (e.g., tag name or attribute), false for plain text.
+ * \param inattribute [in] True if the entity is within an attribute value, false otherwise.
+ * \param attrQuoteChar [in] The quote character (' or ") used in the attribute, or '\0' if not applicable.
+ * \param currentOsisID [in] The OSIS ID for context in warning messages.
+ *
+ * \return True if the character was consumed by the entity parser, false otherwise.
+ *
+ * \note Logs warnings and errors to std::cout if (debug & DEBUG_PARSE).
+ * \note Thread-safe as long as inentity, inWhitespace, entitytype, entityToken, token, and text are not shared across threads without synchronization.
+ * \note Uses SWBuf::operator<< for shifting entityToken in error cases.
+ * \note Throws std::runtime_error for invalid entitytype values.
+ */
+bool handleEntity(char curChar, bool& inentity, bool& inWhitespace, EntityType& entitytype,
+		SWBuf& entityToken, SWBuf& token, SWBuf& text, bool intoken,
+		bool inattribute, char attrQuoteChar, const char* currentOsisID) {
+	if (!inentity && curChar != '&') {
+		return false; // Fast-path for non-entity characters
+	}
+	if (!inentity && curChar == '&') {
+		inentity = true;
+		inWhitespace = false;
+		entitytype = EntityType::START;
+		entityToken = "&";
+		return true;
+	}
+	if (inentity) {
+		if (entityToken.length() >= MAX_ENTITY_LENGTH) {
+			inentity = false;
+			entitytype = EntityType::ERR;
+			if (debug & DEBUG_PARSE) {
+				auto msgPrefix = identifyMsg("WARNING", "PARSE", currentOsisID);
+				std::cout << msgPrefix
+					  << "Entity length exceeds maximum ("
+					  << MAX_ENTITY_LENGTH
+					  << " characters), treating as malformed: "
+					  << entityToken
+					  << std::endl;
+			}
+		}
+		else if (curChar == ';') {
+			inentity = false;
+		}
+		if (entitytype != EntityType::ERR) {
+			entityToken.append(curChar);
+		}
+		if (inentity) {
+			switch (entitytype) {
+			case EntityType::START:
+				if (curChar == '#') {
+					entitytype = EntityType::NUM_HASH;
+				}
+				else if (std::isalnum(curChar)) {
+					entitytype = EntityType::CHAR;
+				}
+				else {
+					inentity = false;
+					entitytype = EntityType::ERR;
+				}
+				break;
+			case EntityType::NUM_HASH:
+				if (curChar == 'x' || curChar == 'X') {
+					entitytype = EntityType::NUM_HEX;
+				}
+				else if (std::isdigit(curChar)) {
+					entitytype = EntityType::NUM_DEC;
+				}
+				else {
+					inentity = false;
+					entitytype = EntityType::ERR;
+				}
+				break;
+			case EntityType::NUM_DEC:
+				if (!std::isdigit(curChar)) {
+					inentity = false;
+					entitytype = EntityType::ERR;
+				}
+				break;
+			case EntityType::NUM_HEX:
+				if (!std::isxdigit(curChar)) {
+					inentity = false;
+					entitytype = EntityType::ERR;
+				}
+				break;
+			case EntityType::CHAR:
+				if (!std::isalnum(curChar)) {
+					inentity = false;
+					entitytype = EntityType::ERR;
+				}
+				break;
+			default:
+				std::cout << identifyMsg("FATAL", "PARSE")
+					  << "Unknown EntityType: "
+					  << (int) entitytype
+					  << std::endl;
+				exit(EXIT_BAD_ENTITY);
+			}
+			return true;
+		}
+		if (!inentity) {
+			auto msgPrefix = identifyMsg("WARNING", "PARSE", currentOsisID);
+			// Handle numeric entities before switch
+			if (entitytype == EntityType::NUM_DEC || entitytype == EntityType::NUM_HEX) {
+				const char* p = entityToken.c_str();
+				p += 2; // Skip &#
+				int base = 10;
+				if (*p == 'x' || *p == 'X') {
+					base = 16;
+					++p;
+				}
+				char* end = nullptr;
+				errno = 0;
+				long codepoint = strtol(p, &end, base);
+				bool isValid = end && *end == ';' && codepoint > 0 && codepoint <= 0x10FFFF && errno != ERANGE;
+				if (isValid) {
+					switch (codepoint) {
+					case 38: // & -> &amp;
+						if (debug & DEBUG_PARSE) {
+							std::cout << msgPrefix
+								  << "Converted numeric entity "
+								  << entityToken
+								  << " to named entity &amp;"
+								  << std::endl;
+						}
+						entityToken = "&amp;";
+						entitytype = EntityType::CHAR;
+						break;
+					case 60: // < -> &lt;
+						if (debug & DEBUG_PARSE) {
+							std::cout << msgPrefix
+								  << "Converted numeric entity "
+								  << entityToken
+								  << " to named entity &lt;"
+								  << std::endl;
+						}
+						entityToken = "&lt;";
+						entitytype = EntityType::CHAR;
+						break;
+					case 62: // > -> &gt;
+						if (debug & DEBUG_PARSE) {
+							std::cout << msgPrefix
+								  << "Converted numeric entity "
+								  << entityToken
+								  << " to named entity &gt;"
+								  << std::endl;
+						}
+						entityToken = "&gt;";
+						entitytype = EntityType::CHAR;
+						break;
+					case 34: // " -> &quot;
+						if (debug & DEBUG_PARSE) {
+							std::cout << msgPrefix
+								  << "Converted numeric entity "
+								  << entityToken
+								  << " to named entity &quot;"
+								  << std::endl;
+						}
+						entityToken = "&quot;";
+						entitytype = EntityType::CHAR;
+						break;
+					case 39: // ' -> &apos;
+						if (debug & DEBUG_PARSE) {
+							std::cout << msgPrefix
+								  << "Converted numeric entity "
+								  << entityToken
+								  << " to named entity &apos;"
+								  << std::endl;
+						}
+						entityToken = "&apos;";
+						entitytype = EntityType::CHAR;
+						break;
+					default:
+						// Non-special codepoints go to UTF-8 conversion
+						break;
+					}
+				}
+				else {
+					if (debug & DEBUG_PARSE) {
+						std::cout << msgPrefix
+							  << "Invalid numeric entity, codepoint out of range or malformed: " 
+							  << entityToken
+							  << std::endl;
+					}
+					entitytype = EntityType::ERR;
+				}
+				// Handle non-special valid codepoints
+				if (entitytype == EntityType::NUM_DEC || entitytype == EntityType::NUM_HEX) {
+					convertNumericEntityToUTF8(entityToken, codepoint, msgPrefix);
+				}
+			}
+			switch (entitytype) {
+			case EntityType::ERR:
+				entityToken << 1;
+				if (debug & DEBUG_PARSE) {
+					std::cout << msgPrefix
+						  << "Malformed entity, replacing with &amp;" 
+						  << entityToken
+						  << std::endl;
+				}
+				(intoken ? token : text).append("&amp;").append(entityToken);
+				break;
+			case EntityType::NUM_HEX:
+			case EntityType::NUM_DEC:
+				(intoken ? token : text).append(entityToken);
+				break;
+			case EntityType::CHAR:
+				if (entityToken != "&amp;" && entityToken != "&lt;" && 
+				    entityToken != "&gt;" && entityToken != "&quot;" && 
+				    entityToken != "&apos;") {
+					if (debug & DEBUG_PARSE) {
+						std::cout << msgPrefix 
+							  << "XML only supports &amp;, &lt;, &gt;, &quot;, &apos;, found " 
+							  << entityToken
+							  << std::endl;
+					}
+					(intoken ? token : text).append(entityToken);
+				}
+				else if (entityToken == "&apos;" || entityToken == "&quot;") {
+					handleQuoteEntity(entityToken, currentOsisID, msgPrefix, inattribute, attrQuoteChar);
+					(intoken ? token : text).append(entityToken);
+				}
+				else {
+					(intoken ? token : text).append(entityToken);
+				}
+				break;
+			default:
+				(intoken ? token : text).append(entityToken);
+				break;
+			}
+			if (curChar == ';') {
+				return true;
+			}
+		}
+	}
+		
+	return false;
+}
+
+void processOSIS(std::istream& infile) {
 
 	strcpy(currentOsisID,"N/A");
 
@@ -1459,18 +2386,19 @@ void processOSIS(istream& infile) {
 	SWBuf token;
 	SWBuf text;
 	bool incomment = false;
-	t_commentstate commentstate = CS_NOT_IN_COMMENT;
+	CommentState commentstate = CommentState::START;
 	bool intoken = false;
 	bool inWhitespace = false;
 	bool seeingSpace = false;
 	unsigned char curChar = '\0';
 	SWBuf entityToken;
 	bool inentity = false;
-	t_entitytype entitytype = ET_NONE;
+	EntityType entitytype = EntityType::START;
 	unsigned char attrQuoteChar = '\0';
 	bool inattribute = false;
-	unsigned int linePos = 1;
-	unsigned int charPos = 0;
+
+	linePos = 1;
+	charPos = 0;
 
 	while (infile.good()) {
 
@@ -1492,18 +2420,6 @@ void processOSIS(istream& infile) {
 		}
 		charPos++;
 
-		// Look for entities:
-		// These are of the form &#dddd;, &xHHHH; or &llll;
-		// where dddd is a sequence of digits
-		//       HHHH is a sequence of [A-Fa-f0-9]
-		//       llll is amp, lt, gt, quot or apos
-		//            but we will look for a sequence of [A-Za-z0-9]
-		// All but &amp;, &lt;, &gt;, &quot;, &apos; will produce a WARNING
-		// In the future:
-		//    &#dddd; and &xHHHH; should be converted to UTF-8,
-		//        with a WARNING if the text is not UTF-8
-		//    &llll; other than the xml standard 5 should produce a WARNING
-
 		// For entity diagnostics track whether the text is an attribute value
 		if (inattribute && (curChar == '\'' || curChar == '"')) {
 			if (attrQuoteChar == curChar) {
@@ -1514,184 +2430,15 @@ void processOSIS(istream& infile) {
 				attrQuoteChar = curChar;
 			}
 		}
+
 		if (intoken && curChar == '=') {
 			inattribute = true;
 			attrQuoteChar = '\0';
 		}
 
-		if (!inentity && curChar == '&') {
-			inentity = true;
-			entitytype = ET_NONE;
-			entityToken = "&";
-			continue;
+		if (handleEntity(curChar, inentity, inWhitespace, entitytype, entityToken, token, text, intoken, inattribute, attrQuoteChar, currentOsisID)) {
+			continue; // Character consumed, move to next
 		}
-
-		if (inentity) {
-			if (curChar == ';') {
-				inentity = false;
-			}
-			else {
-				switch (entitytype) {
-				    case ET_NONE:
-					// A hex entity cannot start with X in XML, but it can in HTML
-					// Allow for it here and complain later
-					if (curChar == 'x' || curChar == 'X') {
-						entitytype = ET_HEX;
-					}
-					else
-					if (curChar == '#') {
-						entitytype = ET_NUM;
-					}
-					else
-					if ((curChar >= 'A' && curChar <= 'Z') ||
-					    (curChar >= 'a' && curChar <= 'z') ||
-					    (curChar >= '0' && curChar <= '9')) {
-						entitytype = ET_CHAR;
-					}
-					else {
-						inentity = false;
-						entitytype = ET_ERR;
-					}
-					break;
-
-				    case ET_NUM :
-					if (!(curChar >= '0' && curChar <= '9')) {
-						inentity = false;
-						entitytype = ET_ERR;
-					}
-					break;
-				    case ET_HEX :
-					if ((curChar >= 'G' && curChar <= 'Z') ||
-					    (curChar >= 'g' && curChar <= 'z')) {
-						// Starts out as a HEX entity, but it isn't one
-						entitytype = ET_CHAR;
-					}
-					else
-					if (!((curChar >= 'A' && curChar <= 'F') ||
-					      (curChar >= 'a' && curChar <= 'f') ||
-					      (curChar >= '0' && curChar <= '9'))) {
-						inentity = false;
-						entitytype = ET_ERR;
-					}
-					break;
-				    case ET_CHAR :
-					if (!((curChar >= 'A' && curChar <= 'Z') ||
-					      (curChar >= 'a' && curChar <= 'z') ||
-					      (curChar >= '0' && curChar <= '9'))) {
-						inentity = false;
-						entitytype = ET_ERR;
-					}
-					break;
-				    default:
-					cout << "FATAL(ENTITY): unknown entitytype on entity end: " << entitytype << endl;
-					exit(EXIT_BAD_NESTING);
-				}
-			}
-
-			if (entitytype != ET_ERR) {
-				entityToken.append((char) curChar);
-			}
-
-			// It is an entity, perhaps invalid, if curChar is ';', error otherwise
-			// Test to see if we now have an entity or a failure
-			// It may not be a valid entity.
-			if (!inentity) {
-				switch (entitytype) {
-				    case ET_ERR :
-					// Remove the leading &
-					entityToken << 1;
-					cout << "WARNING(PARSE): malformed entity, replacing &" << entityToken << " with &amp;" << entityToken << endl;
-					if (intoken) {
-						token.append("&amp;");
-						token.append(entityToken);
-					}
-					else {
-						text.append("&amp;");
-						text.append(entityToken);
-					}
-					break;
-				    case ET_HEX :
-					if (entityToken[1] != 'x') {
-						cout << "WARNING(PARSE): HEX entity must begin with &x, found " << entityToken << endl;
-					}
-					else {
-						cout << "WARNING(PARSE): SWORD does not search HEX entities, found " << entityToken << endl;
-					}
-					break;
-				    case ET_CHAR :
-					if (strcmp(entityToken, "&amp;")  &&
-				            strcmp(entityToken, "&lt;")   &&
-				            strcmp(entityToken, "&gt;")   &&
-				            strcmp(entityToken, "&quot;") &&
-				            strcmp(entityToken, "&apos;")) {
-						cout << "WARNING(PARSE): XML only supports 5 Character entities &amp;, &lt;, &gt;, &quot; and &apos;, found " << entityToken << endl;
-					}
-					else
-					if (!strcmp(entityToken, "&apos;")) {
-						cout << "WARNING(PARSE): While valid for XML, XHTML does not support &apos;." << endl;
-						if (!inattribute) {
-							cout << "WARNING(PARSE): &apos; is unnecessary outside of attribute values. Replacing with '. " << endl;
-							entityToken = "'";
-						}
-						else {
-							switch (attrQuoteChar) {
-							    case '"' :
-								cout << "WARNING(PARSE): &apos; is unnecessary inside double quoted attribute values. Replacing with '. " << endl;
-								entityToken = "'";
-								break;
-							    case '\'' :
-								cout << "WARNING(PARSE): &apos; is only needed within single quoted attribute values. Considering using double quoted attribute and replacing with '." << endl;
-								break;
-							}
-						}
-					}
-					else
-					if (!strcmp(entityToken, "&quot;")) {
-						cout << "WARNING(PARSE): While valid for XML, &quot; is only needed within double quoted attribute values" << endl;
-						if (!inattribute) {
-							cout << "WARNING(PARSE): &quot; is unnecessary outside of attribute values. Replace with \"." << endl;
-							entityToken = "\"";
-						}
-						else {
-							switch (attrQuoteChar) {
-							    case '"' :
-								cout << "WARNING(PARSE): &quot; is only needed within double quoted attribute values. Considering using single quoted attribute and replacing with \"." << endl;
-								break;
-							    case '\'' :
-								cout << "WARNING(PARSE): &quot; is unnecessary inside single quoted attribute values. Replace with \"." << endl;
-								entityToken = "\"";
-								break;
-							}
-						}
-					}
-					break;
-				    case ET_NUM :
-					cout << "WARNING(PARSE): SWORD does not search numeric entities, found " << entityToken << endl;
-					break;
-				    case ET_NONE :
-				    default:
-					break;
-				}
-
-				// Put the entity into the stream.
-				if (intoken) {
-					token.append(entityToken);
-				}
-				else {
-					text.append(entityToken);
-				}
-
-				if (curChar == ';') {
-					// The character was handled, so go get the next one.
-					continue;
-				}
-			}
-			else {
-				// The character was handled, so go get the next one.
-				continue;
-			}
-		}
-
 
 		if (!intoken && curChar == '<') {
 			intoken = true;
@@ -1703,90 +2450,13 @@ void processOSIS(istream& infile) {
 
 		// Handle XML comments starting with "<!--", ending with "-->"
 		if (intoken && !incomment) {
-			switch (commentstate) {
-				case CS_NOT_IN_COMMENT :
-					if (curChar == '!') {
-						commentstate = CS_SEEN_STARTING_EXCLAMATION;
-						token.append((char) curChar);
-						continue;
-					} else {
-						break;
-					}
-
-				case CS_SEEN_STARTING_EXCLAMATION :
-					if (curChar == '-') {
-						commentstate = CS_SEEN_STARTING_HYPHEN;
-						token.append((char) curChar);
-						continue;
-					} else {
-						commentstate = CS_NOT_IN_COMMENT;
-						break;
-					}
-
-				case CS_SEEN_STARTING_HYPHEN :
-					if (curChar == '-') {
-						incomment = true;
-						commentstate = CS_IN_COMMENT;
-						token.append((char) curChar);
-
-						if (debug & DEBUG_OTHER) {
-							cout << "DEBUG(COMMENTS): in comment" << endl;
-						}
-
-						continue;
-					} else {
-						commentstate = CS_NOT_IN_COMMENT;
-						break;
-					}
-
-				default:
-					cout << "FATAL(COMMENTS): unknown commentstate on comment start: " << commentstate << endl;
-					exit(EXIT_BAD_NESTING);
+			if (handleComment(curChar, currentOsisID, intoken, incomment, commentstate, token)) {
+				continue; // Character consumed, move to next
 			}
 		}
 
-		if (incomment) {
-			switch (commentstate) {
-				case CS_IN_COMMENT:
-					if (curChar == '-') {
-						commentstate = CS_SEEN_ENDING_HYPHEN;
-						continue;
-					} else {
-						// ignore the character
-						continue;
-					}
-
-				case CS_SEEN_ENDING_HYPHEN :
-					if (curChar == '-') {
-						commentstate = CS_SEEN_SECOND_ENDING_HYPHEN;
-						continue;
-					} else {
-						// ignore character
-						commentstate = CS_IN_COMMENT;
-						continue;
-					}
-
-				case CS_SEEN_SECOND_ENDING_HYPHEN :
-					if (curChar == '>') {
-						intoken = false;
-						incomment = false;
-						commentstate = CS_NOT_IN_COMMENT;
-
-						if (debug & DEBUG_OTHER) {
-							cout << "DEBUG(COMMENTS): out of comment" << endl;
-						}
-
-						continue;
-					} else {
-						// ignore character
-						commentstate = CS_IN_COMMENT;
-						continue;
-					}
-
-				default:
-					cout << "FATAL(COMMENTS): unknown commentstate on comment end: " << commentstate << endl;
-					exit(EXIT_BAD_NESTING);
-			}
+		if (incomment && handleComment(curChar, currentOsisID, intoken, incomment, commentstate, token)) {
+			continue; // Character consumed, move to next
 		}
 
 		// Outside of tokens merge adjacent whitespace
@@ -1809,14 +2479,18 @@ void processOSIS(istream& infile) {
 			// take this isalpha if out to check for bugs in text
 			if (isalpha(token[1]) ||
 			    (((token[1] == '/') || (token[1] == '?')) && isalpha(token[2]))) {
-				//cout << "Handle:" << token.c_str() << endl;
+				//std::cout << "Handle:" << token.c_str() << std::endl;
 				XMLTag t = transformBSP(token.c_str());
 
 				if (!handleToken(text, t)) {
 					text.append(t);
 				}
-			} else {
-				cout << "WARNING(PARSE): malformed token: " << token << endl;
+			}
+			else {
+				std::cout << identifyMsg("WARNING", "PARSE", currentOsisID)
+					  << "malformed token: "
+					  << token
+					  << std::endl;
 			}
 			continue;
 		}
@@ -1826,9 +2500,21 @@ void processOSIS(istream& infile) {
 		}
 		else {
 			switch (curChar) {
-				case '>' : cout << "WARNING(PARSE): > should be &gt;" << endl; text.append("&gt;"); break;
-				case '<' : cout << "WARNING(PARSE): < should be &lt;" << endl; text.append("&lt;"); break;
-				default  : text.append((char) curChar); break;
+			case '>' :
+				std::cout << identifyMsg("WARNING", "PARSE", currentOsisID)
+					  << "> should be &gt;"
+					  << std::endl;
+				text.append("&gt;");
+				break;
+			case '<' :
+				std::cout << identifyMsg("WARNING", "PARSE", currentOsisID)
+					  << "< should be &lt;"
+					  << std::endl;
+				text.append("&lt;");
+				break;
+			default  :
+				text.append((char) curChar);
+				break;
 			}
 		}
 	}
@@ -1932,8 +2618,59 @@ int main(int argc, char **argv) {
 			else usage(*argv, "-c requires <cipher_key>");
 		}
 		else if (!strcmp(argv[i], "-v")) {
-			if (i+1 < argc) v11n = argv[++i];
-			else usage(*argv, "-v requires <v11n>");
+			if (i + 1 >= argc) {
+				usage(*argv, "-v requires <v11n>");
+			}
+
+			const char *arg = argv[++i];
+			SWBuf v11nInput = arg;
+
+			VersificationMgr *vmgr = VersificationMgr::getSystemVersificationMgr();
+
+			// a path to a versification definition registers it and uses
+			// it, so a module can be BUILT with the custom system it ships
+			if (v11nInput.endsWith(".xml") && FileMgr::existsFile(v11nInput.c_str())) {
+				SWBuf registered;
+				if (!vmgr->registerVersificationSystemFromXML(v11nInput.c_str(), 0, &registered)) {
+					SWBuf error = "-v ";
+					error += v11nInput;
+					error += " could not be read as a versification definition";
+					usage(*argv, error);
+				}
+				v11nInput = registered;
+			}
+
+			const StringList &av11ns = vmgr->getVersificationSystems();
+			StringList matches = resolve_abbreviation(v11nInput, av11ns);
+
+			if (matches.empty()) {
+				SWBuf error = "-v ";
+				error += v11nInput;
+				error += " is unknown";
+				usage(*argv, error);
+			}
+
+			if (matches.size() > 1) {
+				SWBuf error = "-v ";
+				error += v11nInput;
+				error += " is ambiguous, matching ";
+				bool first = true;
+				for (const auto &v : matches) {
+					if (!first) {
+						error += ", ";
+					}
+					error += v;
+					first = false;
+				}
+				usage(*argv, error);
+			}
+
+			v11n = matches.front();  // single unambiguous match
+			std::cout << identifyMsg("INFO", "V11N")
+				  << "Using the "
+				  << v11n
+				  << " versification."
+				  << std::endl;
 		}
 		else if (!strcmp(argv[i], "-s")) {
 			if (i+1 < argc) {
@@ -1998,12 +2735,24 @@ int main(int argc, char **argv) {
 #ifndef _ICU_
 	if (normalize) {
 		normalize = false;
-		cout << "WARNING(UTF8): " << program << " is not compiled with support for ICU. Assuming -N." << endl;
+		std::cout << identifyMsg("WARNING", "UTF8")
+			  << program
+			  << " is not compiled with support for ICU. Assuming -N."
+			  << std::endl;
 	}
 #endif
 
 	if (debug & DEBUG_OTHER) {
-		cout << "DEBUG(ARGS):\n\tpath: " << path << "\n\tosisDoc: " << osisDoc << "\n\tcreate: " << append << "\n\tcompressType: " << compType << "\n\tblockType: " << iType << "\n\tcompressLevel: " << compLevel << "\n\tcipherKey: " << cipherKey.c_str() << "\n\tnormalize: " << normalize << endl;
+		std::cout << identifyMsg("DEBUG", "ARGS")
+			  << "\n\tpath: " << path
+			  << "\n\tosisDoc: " << osisDoc
+			  << "\n\tcreate: " << append
+			  << "\n\tcompressType: " << compType
+			  << "\n\tblockType: " << iType
+			  << "\n\tcompressLevel: " << compLevel
+			  << "\n\tcipherKey: " << cipherKey.c_str()
+			  << "\n\tnormalize: " << normalize
+			  << std::endl;
 	}
 
 	if (!append) {  // == 0 then create module
@@ -2054,7 +2803,7 @@ int main(int argc, char **argv) {
 				FMT_UNKNOWN,    // markup
 				0,              // lang
 				v11n            // versification
-		       );
+			);
 		}
 		else {
 			// Create a compressed text module allowing reasonable sized entries
@@ -2071,7 +2820,7 @@ int main(int argc, char **argv) {
 				FMT_UNKNOWN,    // markup
 				0,              // lang
 				v11n            // versification
-		       );
+			);
 		}
 	}
 	else if (entrySize == 4) {
@@ -2108,9 +2857,14 @@ int main(int argc, char **argv) {
 	SWFilter *cipherFilter = 0;
 
 	if (cipherKey.length()) {
-		fprintf(stderr, "Adding cipher filter with phrase: %s\n", cipherKey.c_str() );
-		cipherFilter = new CipherFilter(cipherKey.c_str());
-		module->addRawFilter(cipherFilter);
+		if (compressor) {
+			fprintf(stderr, "Adding cipher filter with phrase: %s\n", cipherKey.c_str() );
+			cipherFilter = new CipherFilter(cipherKey.c_str());
+			module->addRawFilter(cipherFilter);
+		}
+		else {
+			fprintf(stderr, "Cipher key ignored. Only compressed modules can be enciphered.\n");
+		}
 	}
 
 	if (!module->isWritable()) {
@@ -2121,11 +2875,11 @@ int main(int argc, char **argv) {
 	// Either read from std::cin (aka stdin), when the argument is a '-'
 	// or from a specified file.
 	if (!strcmp(osisDoc, "-")) {
-		processOSIS(cin);
+		processOSIS(std::cin);
 	}
 	else {
 		// Let's see if we can open our input file
-		ifstream infile(osisDoc);
+		std::ifstream infile(osisDoc);
 		if (infile.fail()) {
 			fprintf(stderr, "ERROR: %s: couldn't open input file: %s \n", program, osisDoc);
 			exit(EXIT_NO_READ);

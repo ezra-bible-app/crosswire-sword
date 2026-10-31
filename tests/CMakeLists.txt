@@ -6,12 +6,18 @@ MESSAGE(STATUS "\n-- CONFIGURING LIBRARY TESTS")
 SET(test_PROGRAMS
 	bibliotest
 	casttest
+	clonetest
+	v11nxmltest
+	v11ndeltatest
 	ciphertest
 	complzss
 	compnone
 	configtest
 	filtertest
 	httptest
+	installmgrtest
+	fileopstest
+	flatapitest
 	introtest
 	indextest
 	keycast

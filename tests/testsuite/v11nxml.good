@@ -1,0 +1,16 @@
+register: ok
+system found: ok
+bookCount: 3
+Gen chapters: 2 lastVerseMax: 25
+FVD chapters: 1 lastVerseMax: 14
+Matt chapters: 2 lastVerseMax: 23
+re-register: ok
+abbr parse: FVD.1.7
+abbr parse: Matt.2.23
+osis parse: FVD.1.14
+after Gen 2:25 comes: FVD.1.1
+module found: ok
+effective versification: CustomV11n
+module key parse: FVD.1.2
+module data: And the vision continues. <chapter eID="FVD.1" osisID="FVD.1"/> <div eID="FVD" osisID="FVD" type="book"/>
+module data: Thus the heavens. <chapter eID="Gen.2" osisID="Gen.2"/> <div eID="Gen" osisID="Gen" type="book"/>

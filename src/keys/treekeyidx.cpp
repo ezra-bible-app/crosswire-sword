@@ -106,7 +106,7 @@ void TreeKeyIdx::setUserData(const char *userData, int size) {
 	// this makes sure any unsnapped path exists
 	assureKeyPath();
 	if (currentNode.userData)
-		delete currentNode.userData;
+		delete [] currentNode.userData;
 
 	if (!size)
 		size = (int)strlen(userData) + 1;

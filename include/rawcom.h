@@ -39,6 +39,9 @@ public:
 			SWTextDirection dir = DIRECTION_LTR, SWTextMarkup markup = FMT_UNKNOWN,
 			const char *ilang = 0, const char *versification = "KJV");
 	virtual ~RawCom();
+	/** copy, with its own file descriptors */
+	RawCom(const RawCom &other) : RawVerse(other), SWCom(other) {}
+	virtual SWModule *clone() const { return new RawCom(*this); }
 
 	virtual SWBuf &getRawEntryBuf() const;
 

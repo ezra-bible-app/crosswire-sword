@@ -39,6 +39,15 @@ SWORD_NAMESPACE_START
  *	idisp	 - Display object to use for displaying
  */
 
+SWCom::SWCom(const SWCom &other) : SWModule(other) {
+	versification = 0;
+	stdstr(&versification, other.versification);
+	tmpVK1 = (VerseKey *)createKey();
+	tmpVK2 = (VerseKey *)createKey();
+	tmpSecond = false;
+}
+
+
 SWCom::SWCom(const char *imodname, const char *imoddesc, SWDisplay *idisp, SWTextEncoding enc, SWTextDirection dir, SWTextMarkup mark, const char *ilang, const char *versification): SWModule(imodname, imoddesc, idisp, "Commentaries", enc, dir, mark, ilang) {
 	this->versification = 0;
 	stdstr(&(this->versification), versification);

@@ -1,0 +1,7 @@
+<v11n v11nID="TestBadBase" base="NoSuchSystem">
+	<collection name="Appendix">
+		<book osisID="Herm" preferredAbbrev="Herm" name="Shepherd of Hermas">
+			<chapter osisID="Herm.1" verseMax="9"/>
+		</book>
+	</collection>
+</v11n>

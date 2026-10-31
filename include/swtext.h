@@ -58,6 +58,7 @@ public:
 			const char *versification = "KJV");
 
 	virtual ~SWText();
+	SWText(const SWText &other);
 	/** Create the correct key (VerseKey) for use with SWText
 	*/
 	virtual SWKey *createKey() const;

@@ -401,7 +401,38 @@ bool OSISHTMLHREF::handleToken(SWBuf &buf, const char *token, BasicFilterUserDat
 		// <title>
 		else if (!strcmp(tag.getName(), "title")) {
 			if ((!tag.isEndTag()) && (!tag.isEmpty())) {
-				outText("<b>", buf, u);
+				SWBuf type = tag.getAttribute("type");
+				SWBuf canonical = tag.getAttribute("canonical");
+				
+				SWBuf classExtras = "";
+
+				if (type.size()) {
+					classExtras.append(" ").append(type);
+				}
+				if (canonical.size() && !strcmp(canonical,"true")) {
+					classExtras.append(" canonical");
+				} 
+				if (u->vkey && !u->vkey->getVerse()) {
+					if (!u->vkey->getChapter()) {
+						if (!u->vkey->getBook()) {
+							if (!u->vkey->getTestament()) {
+								outText(SWBuf("<b class=\"moduleHeader") + classExtras + "\">",  buf, u);
+							}
+							else {
+								outText(SWBuf("<b class=\"testamentHeader") + classExtras + "\">", buf, u);
+							}
+						}
+						else {
+							outText(SWBuf("<b class=\"bookHeader") + classExtras + "\">", buf, u);
+						}
+					}
+					else {
+						outText(SWBuf("<b class=\"chapterHeader") + classExtras + "\">", buf, u);
+					}
+				}
+				else {
+					outText(SWBuf("<b class=\"title") + classExtras + "\">", buf, u);
+				}
 			}
 			else if (tag.isEndTag()) {
 				outText("</b><br />", buf, u);

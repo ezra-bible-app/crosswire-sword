@@ -134,6 +134,11 @@ LZSSCompress::LZSSCompress() : SWCompress() {
 }
 
 
+LZSSCompress::LZSSCompress(const LZSSCompress &other) : SWCompress(other) {
+	p = new Private();
+}
+
+
 /******************************************************************************
  * LZSSCompress Destructor - Cleans up instance of LZSSCompress
  */

@@ -44,10 +44,19 @@ const char *OSISXHTML::getHeader() const {
 		.transChange.transChange-tenseChange { font-style: normal; }\n\
 		.transChange:lang(zh) { font-style: normal; text-decoration: dotted underline; }\n\
 		.overline { text-decoration: overline; }\n\
-		.indent1 { margin-left: 1em; }\n\
-		.indent2 { margin-left: 2em; }\n\
-		.indent3 { margin-left: 3em; }\n\
-		.indent4 { margin-left: 4em; }\n\
+		/* poetry: each <l> is a block with a hanging indent, so a wrapped line\n\
+		   is told apart from the next line; the verse number sits in the outdent */\n\
+		.line { display: block; padding-left: 1.5em; text-indent: -1.5em; }\n\
+		.line + br { display: none; }\n\
+		.line.indent1 { padding-left: 2.5em; }\n\
+		.line.indent2 { padding-left: 3.5em; }\n\
+		.line.indent3 { padding-left: 4.5em; }\n\
+		.line.indent4 { padding-left: 5.5em; }\n\
+		.line.indent5 { padding-left: 6.5em; }\n\
+		.indent1:not(.line) { margin-left: 1em; }\n\
+		.indent2:not(.line) { margin-left: 2em; }\n\
+		.indent3:not(.line) { margin-left: 3em; }\n\
+		.indent4:not(.line) { margin-left: 4em; }\n\
 		abbr { &:hover{ &:before{ content: attr(title); } } }\n\
 		.small-caps { font-variant: small-caps; }\n\
 		.otPassage { font-variant: small-caps; }\n\
@@ -459,8 +468,12 @@ bool OSISXHTML::handleToken(SWBuf &buf, const char *token, BasicFilterUserData *
 				if (type == "selah") {
 					outText("<p class=\"selah\">", buf, u);
 				} else {
-					// nested lines plus if the line itself has an x-indent type attribute value
-					outText(SWBuf("<span class=\"line indent").appendFormatted("%d\">", u->lineStack->size() + (SWBuf("x-indent") == tag.getAttribute("type")?1:0)).c_str(), buf, u);
+					// indentation: nesting depth, plus one for type="x-indent",
+					// or the OSIS level attribute (level 1 = flush) when it asks for more
+					int indent = (int)u->lineStack->size() + (SWBuf("x-indent") == tag.getAttribute("type") ? 1 : 0);
+					const char *level = tag.getAttribute("level");
+					if (level && atoi(level) - 1 > indent) indent = atoi(level) - 1;
+					outText(SWBuf("<span class=\"line indent").appendFormatted("%d\">", indent).c_str(), buf, u);
 				}
 				u->lineStack->push(tag.toString());
 			}
@@ -622,7 +635,7 @@ bool OSISXHTML::handleToken(SWBuf &buf, const char *token, BasicFilterUserData *
 			}
 		}
 		// <catchWord> & <rdg> tags (italicize)
-		else if (!strcmp(tag.getName(), "rdg") || !strcmp(tag.getName(), "catchWord") || !strcmp(tag.getName(), "inscription")) {
+		else if (!strcmp(tag.getName(), "app") || !strcmp(tag.getName(), "lem") || !strcmp(tag.getName(), "rdg") || !strcmp(tag.getName(), "catchWord") || !strcmp(tag.getName(), "inscription")) {
 			if ((!tag.isEndTag()) && (!tag.isEmpty())) {
 				outText("<span class=\"", buf, u);
 				outText(tag.getName(), buf, u);

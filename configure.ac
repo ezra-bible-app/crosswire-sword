@@ -2,11 +2,19 @@
 # Initialisation
 # ---------------------------------------------------------------------
 
-# Version change: Change line 9 only !
+# Version change: Change the swordbase line only !
 # Change it immediately after a release
 
-define([svnversion], esyscmd([sh -c "svnversion -n"]))dnl
-AC_INIT(sword, 1.9.0.svnversion, sword-bugs@crosswire.org, sword, http://crosswire.org/sword)
+define([swordbase], [1.9.0])dnl
+dnl repository revision suffix.  From a git checkout: the svn revision of the
+dnl newest commit that carries a git-svn-id, plus the number of commits since,
+dnl so the number keeps counting on from where the svn era left off (a bare
+dnl commit count would fall below the revisions our releases were stamped
+dnl with); from an svn checkout: svnversion; omitted otherwise.  Keep in step
+dnl with CMakeLists.txt.
+define([swordrev], esyscmd([sh -c "if git rev-parse --git-dir >/dev/null 2>&1; then c=\$(git log -1 --format=%H --grep=^git-svn-id: 2>/dev/null); if test -n \"\$c\"; then r=\$(git log -1 --format=%B \$c | grep ^git-svn-id: | cut -d@ -f2 | cut -d' ' -f1); n=\$(git rev-list --count \$c..HEAD); echo \$((r + n)); else git rev-list --count HEAD; fi; else svnversion -n 2>/dev/null | cut -d: -f1; fi | tr -cd 0-9"]))dnl
+define([swordver], swordbase[]ifelse(swordrev, [], [], [.]swordrev))dnl
+AC_INIT(sword, swordver, sword-bugs@crosswire.org, sword, http://crosswire.org/sword)
 AC_CONFIG_SRCDIR(sword.bmp)
 AC_PREREQ(2.52)
 AC_REVISION($Revision: 1.45 $)
@@ -154,14 +162,9 @@ AC_LANG_POP([C++])
 # Check libraries
 # ---------------------------------------------------------------------
 if test x$with_zlib  = xyes; then
-	AC_CHECK_LIB(z, compress,,with_zlib="no")
+	AC_CHECK_LIB(z, compress,,AC_MSG_ERROR([zlib not found.  zlib is required: zText/zCom/zLD modules and remote-install archives depend on it.  Install the zlib development files.]))
 else
-	with_zlib="no"
-fi
-
-if test x$with_zlib = xno; then
-	AM_CFLAGS="$AM_CFLAGS -DEXCLUDEZLIB"
-	AM_CXXFLAGS="$AM_CXXFLAGS -DEXCLUDEZLIB"
+	AC_MSG_ERROR([--without-zlib is not supported: zlib is required (zText/zCom/zLD modules and remote-install archives).  A build without it stopped compiling long ago, so the option only delayed the failure.])
 fi
 
 if test x$with_bzip2  = xyes; then
@@ -308,11 +311,11 @@ else
 fi
 
 if test x$with_cxx11regex = xyes; then
-	AM_CXXFLAGS="$AM_CXXFLAGS -DUSECXX11REGEX -std=c++11"
+	AM_CXXFLAGS="$AM_CXXFLAGS -DUSECXX11REGEX"
 fi
 
 if test x$with_cxx11time = xyes; then
-	AM_CXXFLAGS="$AM_CXXFLAGS -DUSECXX11TIME -std=c++11"
+	AM_CXXFLAGS="$AM_CXXFLAGS -DUSECXX11TIME"
 fi
 
 if test x$disable_logdebug = xyes; then

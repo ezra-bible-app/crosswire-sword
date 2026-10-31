@@ -8,11 +8,12 @@ LDADD = $(top_builddir)/lib/libsword.la
 SUBDIRS = cppunit testsuite
 
 noinst_PROGRAMS = utf8norm ciphertest keytest mgrtest parsekey versekeytest \
-			vtreekeytest versemgrtest listtest casttest modtest \
+			vtreekeytest versemgrtest listtest casttest modtest clonetest v11nxmltest v11ndeltatest \
 			compnone complzss localetest introtest indextest \
 			configtest keycast romantest testblocks filtertest \
 			rawldidxtest lextest swaptest swbuftest xmltest \
-			webiftest striptest ldtest osistest bibliotest
+			webiftest striptest ldtest osistest bibliotest installmgrtest \
+			fileopstest flatapitest
 
 if WITHCURL
 noinst_PROGRAMS += httptest
@@ -54,6 +55,9 @@ vtreekeytest_SOURCES = vtreekeytest.cpp
 versemgrtest_SOURCES = versemgrtest.cpp
 listtest_SOURCES = listtest.cpp
 casttest_SOURCES = casttest.cpp
+clonetest_SOURCES = clonetest.cpp
+v11nxmltest_SOURCES = v11nxmltest.cpp
+v11ndeltatest_SOURCES = v11ndeltatest.cpp
 modtest_SOURCES = modtest.cpp
 compnone_SOURCES = compnone.cpp
 complzss_SOURCES = complzss.cpp
@@ -76,4 +80,7 @@ ldtest_SOURCES = ldtest.cpp
 osistest_SOURCES = osistest.cpp
 bibliotest_SOURCES = bibliotest.cpp
 httptest_SOURCES = httptest.cpp
+installmgrtest_SOURCES = installmgrtest.cpp
+fileopstest_SOURCES = fileopstest.cpp
+flatapitest_SOURCES = flatapitest.cpp
 

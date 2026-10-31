@@ -61,13 +61,22 @@ namespace {
 		return (int)FileMgr::write(out->fd, buffer, size * nmemb);
 	}
 
+	struct MyProgressData {
+		StatusReporter *sr;
+		bool *term;
+	};
 
 	static int my_httpfprogress(void *clientp, double dltotal, double dlnow, double ultotal, double ulnow) {
 		if (clientp) {
-			if (dltotal < 0) dltotal = 0;
-			if (dlnow < 0) dlnow = 0;
-			if (dlnow > dltotal) dlnow = dltotal;
-			((StatusReporter *)clientp)->update(dltotal, dlnow);
+			MyProgressData *pd = (MyProgressData *)clientp;
+SWLOGD("CURLHTTPTransport report progress: totalSize: %ld; xfered: %ld\n", (long)dltotal, (long)dlnow);
+			if (pd->sr) {
+				if (dltotal < 0) dltotal = 0;
+				if (dlnow < 0) dlnow = 0;
+				if (dlnow > dltotal) dlnow = dltotal;
+				pd->sr->update(dltotal, dlnow);
+			}
+			if (*(pd->term)) return 1;
 		}
 		return 0;
 	}
@@ -119,6 +128,11 @@ char CURLHTTPTransport::getURL(const char *destPath, const char *sourceURL, SWBu
 	CURLcode res;
 
 	if (session) {
+
+		struct MyProgressData pd;
+		pd.sr = statusReporter;
+		pd.term = &term;
+
 		curl_easy_setopt(session, CURLOPT_URL, sourceURL);
 
 		SWBuf credentials = u + ":" + p;
@@ -127,21 +141,21 @@ char CURLHTTPTransport::getURL(const char *destPath, const char *sourceURL, SWBu
 		if (!passive)
 			curl_easy_setopt(session, CURLOPT_FTPPORT, "-");
 		curl_easy_setopt(session, CURLOPT_NOPROGRESS, 0);
-		curl_easy_setopt(session, CURLOPT_FAILONERROR, 1);
-		curl_easy_setopt(session, CURLOPT_PROGRESSDATA, statusReporter);
+		curl_easy_setopt(session, CURLOPT_PROGRESSDATA, &pd);
+		curl_easy_setopt(session, CURLOPT_FAILONERROR, 1L);
 		curl_easy_setopt(session, CURLOPT_PROGRESSFUNCTION, my_httpfprogress);
+
 		curl_easy_setopt(session, CURLOPT_DEBUGFUNCTION, myhttp_trace);
 		/* Set a pointer to our struct to pass to the callback */
 		curl_easy_setopt(session, CURLOPT_FILE, &ftpfile);
 
 		/* Switch on full protocol/debug output */
 		curl_easy_setopt(session, CURLOPT_VERBOSE, true);
+		if (*getCAInfo()) curl_easy_setopt(session, CURLOPT_CAINFO, getCAInfo());
 #ifndef OLDCURL
 		curl_easy_setopt(session, CURLOPT_CONNECTTIMEOUT_MS, timeoutMillis);
-		curl_easy_setopt(session, CURLOPT_TIMEOUT_MS, timeoutMillis);
 #else
 		curl_easy_setopt(session, CURLOPT_CONNECTTIMEOUT, timeoutMillis/1000);
-		curl_easy_setopt(session, CURLOPT_TIMEOUT, timeoutMillis/1000);
 #endif
 
 		/* Disable checking host certificate */
@@ -177,8 +191,20 @@ SWLOGD("***** Finished performing curl easy action. \n");
                ) {
 				retVal = -2;
 			}
-			else {
+			else if (CURLE_REMOTE_ACCESS_DENIED == res) {
+				retVal = -3;
+			}
+			else if (CURLE_REMOTE_FILE_NOT_FOUND == res) {
+				retVal = -4;
+			}
+			else if (CURLE_HTTP_RETURNED_ERROR == res) {
+				retVal = -5;
+			}
+			else if (this->term)  {
 				retVal = -1;
+			}
+			else {
+				retVal = (signed char)(-10 - (int)res);	// any other libcurl error, still < -1
 			}
 		}
 	}
@@ -233,7 +259,7 @@ vector<struct DirEntry> CURLHTTPTransport::getDirList(const char *dirURL) {
 			possibleNameLength = (int)(pBufRes - pBuf);
 			possibleName.setFormatted("%.*s", possibleNameLength, pBuf);
 			if (isalnum(possibleName[0])) {
-SWLOGD("getDirListHTTP: Found a file: %s", possibleName.c_str());
+SWLOGD("CURLHTTPTransport::getDirList: Found a file: %s", possibleName.c_str());
 				pBuf = pBufRes;
 				pBufRes = (char *)findSizeStart(pBuf);
 				fSize = 0;
@@ -260,7 +286,7 @@ SWLOGD("getDirListHTTP: Found a file: %s", possibleName.c_str());
 	}
 	else
 	{
-		SWLog::getSystemLog()->logWarning("FTPURLGetDir: failed to get dir %s\n", dirURL);
+		SWLog::getSystemLog()->logWarning("CURLHTTPTransport::getDirList: failed to get dir %s\n", dirURL);
 	}
 	return dirList;
 }

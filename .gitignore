@@ -1,0 +1,12 @@
+bindings/Android/prefab-repo/
+bindings/cordova/cordova-plugin-crosswire-sword/libs/
+bindings/cordova/cordova-plugin-crosswire-sword/src/ios/defs.h
+bindings/cordova/cordova-plugin-crosswire-sword/src/ios/flatapi.h
+bindings/objc/dependencies/*.tar.gz
+bindings/objc/dependencies/clucene/
+bindings/objc/dependencies/curl/
+bindings/objc/dependencies/icu/
+bindings/objc/dependencies/curl-*/
+bindings/objc/dependencies/openssl-*/
+bindings/objc/dependencies/build-*/
+bindings/objc/dependencies/out/

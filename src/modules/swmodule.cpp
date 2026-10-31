@@ -130,6 +130,41 @@ SWModule::SWModule(const char *imodname, const char *imoddesc, SWDisplay *idisp,
 
 
 /******************************************************************************
+ * SWModule Copy Constructor
+ */
+
+SWModule::SWModule(const SWModule &other) {
+	key       = other.key ? other.key->clone() : createKey();
+	entryBuf  = "";
+	if (other.config == &other.ownConfig) { ownConfig = other.ownConfig; config = &ownConfig; }
+	else config = other.config;
+	modname   = 0;
+	moddesc   = 0;
+	modtype   = 0;
+	modlang   = 0;
+	stdstr(&modname, other.modname);
+	stdstr(&moddesc, other.moddesc);
+	stdstr(&modtype, other.modtype);
+	stdstr(&modlang, other.modlang);
+	error     = 0;
+	encoding  = other.encoding;
+	direction = other.direction;
+	markup    = other.markup;
+	entrySize = -1;
+	entryIndex = 0;
+	disp      = other.disp;
+	stripFilters    = new FilterList(*other.stripFilters);
+	rawFilters      = new FilterList(*other.rawFilters);
+	renderFilters   = new FilterList(*other.renderFilters);
+	optionFilters   = new OptionFilterList(*other.optionFilters);
+	encodingFilters = new FilterList(*other.encodingFilters);
+	skipConsecutiveLinks = other.skipConsecutiveLinks;
+	procEntAttr = other.procEntAttr;
+	terminateSearch = false;
+}
+
+
+/******************************************************************************
  * SWModule Destructor - Cleans up instance of SWModule
  */
 
@@ -550,7 +585,13 @@ ListKey &SWModule::search(const char *istr, int searchType, int flags, SWKey *sc
 			Xapian::Query q = queryParser.parse_query(istr);
 			Xapian::Enquire enquire = Xapian::Enquire(database);
 #elif defined USELUCENE
-			q = QueryParser::parse((wchar_t *)utf8ToWChar(istr).getRawData(), _T("content"), &analyzer);
+			// Append a trailing space to work around a CLucene tokenizer bug where
+			// the last token is not finalized correctly without a following whitespace.
+			// This fixes: single +TERM searches, and some Unicode words (e.g. Greek LXX).
+			SWBuf istrPadded = istr;
+			istrPadded.append(' ');
+			q = QueryParser::parse((wchar_t *)utf8ToWChar(istrPadded).getRawData(), _T("content"), &analyzer);
+
 #endif
 			(*percent)(20, percentUserData);
 
@@ -1181,7 +1222,7 @@ void SWModule::setConfig(ConfigEntMap *config) {
 
 
 bool SWModule::hasSearchFramework() {
-#ifdef USELUCENE
+#if defined(USELUCENE) || defined(USEXAPIAN)
 	return true;
 #else
 	return SWSearchable::hasSearchFramework();

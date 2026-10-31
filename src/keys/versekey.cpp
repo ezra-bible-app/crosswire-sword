@@ -401,7 +401,8 @@ int VerseKey::getBookFromAbbrev(const char *iabbr) const
 
 	int abbrevsCnt;
 
-	const struct abbrev *abbrevs = getPrivateLocale()->getBookAbbrevs(&abbrevsCnt);
+	// builtin English + this system's own additions + the locale's entries
+	const struct abbrev *abbrevs = refSys->getBookAbbrevs(getPrivateLocale(), &abbrevsCnt);
 
 	StringMgr* stringMgr = StringMgr::getSystemStringMgr();
 	const bool hasUTF8Support = StringMgr::hasUTF8Support();
@@ -582,7 +583,9 @@ ListKey VerseKey::parseVerseList(const char *buf, const char *defaultKey, bool e
 	lastKey->setAutoNormalize(false);
 	if (defaultKey) *lastKey = defaultKey;
 
+
 	while (*buf) {
+		bool gotoTerminateRange = false;
 		switch (*buf) {
 		case ':':
 			if (buf[1] != ' ') {		// for silly "Mat 1:1: this verse...."
@@ -597,9 +600,10 @@ ListKey VerseKey::parseVerseList(const char *buf, const char *defaultKey, bool e
 				comma = 0;
 				break;
 			}
-			goto terminate_range;
-			// otherwise drop down to next case
-		case ' ':
+			// otherwise drop down to terminateRange
+			gotoTerminateRange = true;
+		case ' ': if (!gotoTerminateRange) {
+			
 			inTerm = true;
 			while (true) {
 				if ((!*number) || (chap < 0))
@@ -616,8 +620,9 @@ ListKey VerseKey::parseVerseList(const char *buf, const char *defaultKey, bool e
 				}
 				break;
 			}
+		}
 
-		case '-':
+		case '-': if (!gotoTerminateRange) {
 			if (chap == -1) {
 				book[tobook] = *buf;
 				book[tobook+1] = *(buf+1);
@@ -629,9 +634,10 @@ ListKey VerseKey::parseVerseList(const char *buf, const char *defaultKey, bool e
 					break;
 				}
 			}
+		}
+// terminateRange:
 		case ',': // on number new verse
 		case ';': // on number new chapter
-terminate_range:
 			number[tonumber] = 0;
 			tonumber = 0;
 			if (*number) {
@@ -1741,6 +1747,12 @@ void VerseKey::setIndex(long iindex)
 void VerseKey::checkBounds() {
 
 	long i = getIndex();
+
+	// assert we're sane
+	if (i < 0) {
+		error = KEYERR_OUTOFBOUNDS;
+		return;
+	}
 
 	initBounds();
 	if (i > upperBound) {

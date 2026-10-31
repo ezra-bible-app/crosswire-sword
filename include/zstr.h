@@ -36,6 +36,7 @@ class SWBuf;
 class SWDLLEXPORT zStr {
 
 private:
+	int fileMode;
 	static int instance;		// number of instantiated zStr objects or derivitives
 	mutable EntriesBlock *cacheBlock;
 	mutable long cacheBlockIndex;
@@ -61,6 +62,8 @@ protected:
 
 public:
 	zStr(const char *ipath, int fileMode = -1, long blockCount = 100, SWCompress *icomp = 0, bool caseSensitive = false);
+	/** copy, with its own file descriptors */
+	zStr(const zStr &other);
 	virtual ~zStr();
 	signed char findKeyIndex(const char *ikey, long *idxoff, long away = 0) const;
 	void getText(long index, char **idxbuf, char **buf) const;

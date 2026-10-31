@@ -28,6 +28,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdarg.h>
+#if defined(__cplusplus) && __cplusplus >= 202002L
+#include <compare>
+#endif
 #ifdef __BORLANDC__
 #include <mem.h>
 #endif
@@ -506,6 +509,16 @@ public:
 	inline long indexOf(const SWBuf &needle) const { const char *ch = strstr(buf, needle.c_str()); return (ch) ? ch - buf : -1; }
 	
 	inline int compare(const SWBuf &other) const { return strcmp(c_str(), other.c_str()); }
+#if defined(__cplusplus) && __cplusplus >= 202002L
+	/** Without this, C++20's synthesized three-way comparison (std::pair,
+	 * std::tuple, container lexicographic compares) would satisfy itself
+	 * through our implicit const char * conversion and compare buffer
+	 * POINTERS instead of contents. */
+	inline std::strong_ordering operator <=>(const SWBuf &other) const {
+		int c = compare(other);
+		return (c < 0) ? std::strong_ordering::less : (c > 0) ? std::strong_ordering::greater : std::strong_ordering::equal;
+	}
+#endif
 	inline bool operator ==(const SWBuf &other) const { return compare(other) == 0; }
 	inline bool operator !=(const SWBuf &other) const { return compare(other) != 0; }
 	inline bool operator > (const SWBuf &other) const { return compare(other) > 0; }

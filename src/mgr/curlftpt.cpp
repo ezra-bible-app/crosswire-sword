@@ -156,19 +156,17 @@ char CURLFTPTransport::getURL(const char *destPath, const char *sourceURL, SWBuf
 		curl_easy_setopt(session, CURLOPT_PROGRESSDATA, &pd);
 		curl_easy_setopt(session, CURLOPT_PROGRESSFUNCTION, my_fprogress);
 
-
 		curl_easy_setopt(session, CURLOPT_DEBUGFUNCTION, my_trace);
 		/* Set a pointer to our struct to pass to the callback */
 		curl_easy_setopt(session, CURLOPT_FILE, &ftpfile);
 
 		/* Switch on full protocol/debug output */
 		curl_easy_setopt(session, CURLOPT_VERBOSE, true);
+		if (*getCAInfo()) curl_easy_setopt(session, CURLOPT_CAINFO, getCAInfo());
 #ifndef OLDCURL
 		curl_easy_setopt(session, CURLOPT_CONNECTTIMEOUT_MS, timeoutMillis);
-		curl_easy_setopt(session, CURLOPT_TIMEOUT_MS, timeoutMillis);
 #else
 		curl_easy_setopt(session, CURLOPT_CONNECTTIMEOUT, timeoutMillis/1000);
-		curl_easy_setopt(session, CURLOPT_TIMEOUT, timeoutMillis/1000);
 #endif
 		/* FTP connection settings */
 
@@ -202,8 +200,20 @@ SWLOGD("***** Finished performing curl easy action. \n");
                ) {
 				retVal = -2;
 			}
-			else {
+			else if (CURLE_REMOTE_ACCESS_DENIED == res) {
+				retVal = -3;
+			}
+			else if (CURLE_REMOTE_FILE_NOT_FOUND == res) {
+				retVal = -4;
+			}
+			else if (CURLE_HTTP_RETURNED_ERROR == res) {
+				retVal = -5;
+			}
+			else if (this->term)  {
 				retVal = -1;
+			}
+			else {
+				retVal = (signed char)(-10 - (int)res);	// any other libcurl error, still < -1
 			}
 		}
 	}

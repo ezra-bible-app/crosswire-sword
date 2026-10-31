@@ -41,7 +41,57 @@ public:
 	SWBuf name;
 	unsigned long size;
 	bool isDirectory;
+	long modTime;		// seconds since the epoch; 0 if unknown
 };
+
+/**
+ * The primitive, path-taking file operations on which FileMgr is built.
+ * The base implementation is plain POSIX; FileMgr::getSystemFileOps()
+ * installs the right implementation for the platform by default (e.g.,
+ * a wide-char one on Windows).
+ *
+ * A platform which cannot reach its storage through ordinary paths --
+ * e.g., an Android shared folder which is only accessible through a
+ * content provider -- subclasses this, overrides whatever it must, and
+ * installs the subclass with FileMgr::setSystemFileOps().  An override
+ * can route some path prefixes to its own storage and fall back to the
+ * base implementation for everything else.
+ *
+ * The descriptor returned from open() must be an ordinary OS file
+ * descriptor: FileMgr does read/write/seek on it directly, and hands it
+ * back to close() when done.
+ */
+class SWDLLEXPORT FileOps {
+public:
+	virtual ~FileOps();
+
+	/** open a file; mode and perms are the FileMgr:: flag values.
+	 * @return fd; < 0 = error */
+	virtual int open(const char *path, int mode, int perms);
+
+	/** @param mode access mode bits (04 = read, 02 = write)
+	 * @return whether path exists and can be accessed in the given mode */
+	virtual bool hasAccess(const char *path, int mode);
+
+	/** fill in entry (name, size, isDirectory, modTime) for path.
+	 * @return 0 on success; non-zero if path does not exist */
+	virtual int stat(const char *path, DirEntry *entry);
+
+	/** contents of a directory, excluding "." and ".."  (see FileMgr::getDirList) */
+	virtual std::vector<struct DirEntry> listDir(const char *dirPath, bool includeSize, bool includeIsDirectory);
+
+	/** create one directory (parent must exist). @return 0 on success */
+	virtual int mkdir(const char *path);
+
+	/** remove a file or an empty directory. @return 0 on success */
+	virtual int remove(const char *path);
+
+	/** close a descriptor obtained from open().  Overridden by backends
+	 * whose descriptors need more than ::close to commit (e.g. a staged
+	 * write uploaded to a document provider).  @return 0 on success */
+	virtual int close(int fd);
+};
+
 
 /**
  * This class isolates all file io for SWORD, making OS
@@ -68,6 +118,7 @@ class SWDLLEXPORT FileMgr : public SWCacher {
 	int sysOpen(FileDesc * file);
 protected:
 	static FileMgr *systemFileMgr;
+	static FileOps *systemFileOps;
 public:
 	static unsigned int CREAT;
 	static unsigned int APPEND;
@@ -86,6 +137,12 @@ public:
 
 	static FileMgr *getSystemFileMgr();
 	static void setSystemFileMgr(FileMgr *newFileMgr);
+
+	/** The FileOps through which all path-based file access is routed.
+	 * Defaults to the plain OS implementation. */
+	static FileOps *getSystemFileOps();
+	/** Install a FileOps; FileMgr takes ownership and deletes any previous one. */
+	static void setSystemFileOps(FileOps *newFileOps);
 
 	/** Constructor.
 	* @param maxFiles The number of files that this FileMgr may open in parallel, if necessary.
@@ -164,7 +221,9 @@ public:
 	* @param includeIsDirectory Optimization flag to allow passing false
 	*	to skip isDirectory lookup
 	*
-	* @return a container of DirEntry records describing contents
+	* @return a container of DirEntry records describing contents.
+	*	modTime is filled in when the FileOps learned it cheaply while
+	*	looking up size or isDirectory; 0 means unknown, ask getFileModTime
 	*/
 	static std::vector<struct DirEntry> getDirList(const char *dirPath, bool includeSize = false, bool includeIsDirectory = true);
 
@@ -177,7 +236,13 @@ public:
 
 	static char isDirectory(const char *path);
 	static long getFileSize(const char *path);
+	/** last modification time of a file, in seconds since the epoch; 0 if unknown
+	 */
+	static long getFileModTime(const char *path);
 	static int createParent(const char *pName);
+	/** creates (or truncates, if it exists) a file for writing, creating any missing parent directories
+	 * @return fd; < 0 = error
+	 */
 	static int createPathAndFile(const char *fName);
 
 	/** attempts to open a file readonly
@@ -193,7 +258,15 @@ public:
 	static int copyDir(const char *srcDir, const char *destDir);
 	static int removeDir(const char *targetDir);
 	static int removeFile(const char *fName);
-	static char getLine(FileDesc *fDesc, SWBuf &line);
+	static char getLine(FileDesc *fDesc, SWBuf &line, bool strip = true);
+
+	/** load a full file up into a buffer
+	 * @param fDesc file descriptor to load (from FileMgr::open)
+	 * @param strip if we should strip the whitespace from front and back of each line
+	 * @param skipCommentLines skip lines which start with '#'
+	 * @return SWBuf filled with full file contents
+	 */
+	static SWBuf loadFile(FileDesc *fDesc, bool strip = false, bool skipCommentLines = false);
 
 	/**
 	 * Determines where SWORD looks for the user's home folder.  This is

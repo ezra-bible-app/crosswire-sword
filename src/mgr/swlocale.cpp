@@ -44,7 +44,7 @@ const char *SWLocale::DEFAULT_LOCALE_NAME="en";
 class SWLocale::Private {
 public:
 	LookupMap lookupTable;
-	LookupMap mergedAbbrevs;
+	LookupMap localeAbbrevs;
 };
 
 
@@ -65,8 +65,6 @@ SWLocale::SWLocale(const char *ifilename) {
 		localeSource   = new SWConfig(0);
 		(*localeSource)["Meta"]["Name"] = DEFAULT_LOCALE_NAME;
 		(*localeSource)["Meta"]["Description"] = "English (US)";
-		bookAbbrevs = (struct abbrev *)builtin_abbrevs;
-		for (abbrevsCnt = 0; builtin_abbrevs[abbrevsCnt].osis[0]; abbrevsCnt++);
 	}
 
 	confEntry = localeSource->getSection("Meta").find("Name");
@@ -96,7 +94,7 @@ SWLocale::~SWLocale() {
 	if (name)
 		delete [] name;
 
-	if (bookAbbrevs != builtin_abbrevs)
+	if (bookAbbrevs)
 		delete [] bookAbbrevs;
 
 	delete p;
@@ -175,33 +173,33 @@ void SWLocale::augment(SWLocale &addFrom) {
 }
 
 
-const struct abbrev *SWLocale::getBookAbbrevs(int *retSize) {
+const struct abbrev *SWLocale::getLocaleBookAbbrevs(int *retSize) {
 	static const char *nullstr = "";
 	if (!bookAbbrevs) {
-		// Assure all english abbrevs are present
-		for (int j = 0; builtin_abbrevs[j].osis[0]; j++) {
-			p->mergedAbbrevs[builtin_abbrevs[j].ab] = builtin_abbrevs[j].osis;
-		}
 		ConfigEntMap::iterator it = localeSource->getSection("Book Abbrevs").begin();
 		ConfigEntMap::iterator end = localeSource->getSection("Book Abbrevs").end();
 		for (; it != end; it++) {
-			p->mergedAbbrevs[it->first.c_str()] = it->second.c_str();
+			p->localeAbbrevs[it->first.c_str()] = it->second.c_str();
 		}
-		int size = (int)p->mergedAbbrevs.size();
+		int size = (int)p->localeAbbrevs.size();
 		bookAbbrevs = new struct abbrev[size + 1];
 		int i = 0;
-		for (LookupMap::iterator it = p->mergedAbbrevs.begin(); it != p->mergedAbbrevs.end(); it++, i++) {
+		for (LookupMap::iterator it = p->localeAbbrevs.begin(); it != p->localeAbbrevs.end(); it++, i++) {
 			bookAbbrevs[i].ab = it->first.c_str();
 			bookAbbrevs[i].osis = it->second.c_str();
 		}
-
 		bookAbbrevs[i].ab = nullstr;
 		bookAbbrevs[i].osis = nullstr;
 		abbrevsCnt = size;
 	}
-		
 	*retSize = abbrevsCnt;
 	return bookAbbrevs;
+}
+
+
+const struct abbrev *SWLocale::getBookAbbrevs(int *retSize) {
+	// KJV has no additions of its own, so this is exactly builtin + locale
+	return VersificationMgr::getSystemVersificationMgr()->getVersificationSystem("KJV")->getBookAbbrevs(this, retSize);
 }
 
 

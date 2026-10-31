@@ -1,0 +1,36 @@
+<v11n v11nID="TestDelta" base="Vulg">
+	<collection collectionID="1">
+		<book osisID="Ps">
+			<chapter osisID="Ps.151" verseMax="7"/>
+		</book>
+		<book osisID="3Macc" preferredAbbrev="3Macc" name="III Maccabees" after="2Macc">
+			<chapter osisID="3Macc.1" verseMax="29"/>
+			<chapter osisID="3Macc.2" verseMax="33"/>
+		</book>
+	</collection>
+	<collection collectionID="1" name="Apocrypha">
+		<book osisID="4Macc" preferredAbbrev="4Macc" name="IV Maccabees">
+			<chapter osisID="4Macc.1" verseMax="35"/>
+		</book>
+	</collection>
+	<collection collectionID="2">
+		<book osisID="Matt">
+			<chapter osisID="Matt.1" verseMax="26"/>
+		</book>
+	</collection>
+	<collection name="Appendix">
+		<book osisID="EpLao"/>
+		<book osisID="Barn" preferredAbbrev="Barn" name="Epistle of Barnabas">
+			<chapter osisID="Barn.1" verseMax="8"/>
+			<chapter osisID="Barn.2" verseMax="10"/>
+		</book>
+		<book osisID="Herm" preferredAbbrev="Herm" name="Shepherd of Hermas">
+			<chapter osisID="Herm.1" verseMax="9"/>
+			<chapter osisID="Herm.2" verseMax="4"/>
+			<chapter osisID="Herm.3" verseMax="5"/>
+		</book>
+	</collection>
+	<abbreviations>
+		<abbr osisID="Herm">Shepherd</abbr>
+	</abbreviations>
+</v11n>

@@ -58,8 +58,12 @@ const char zVerse4::uniqueIndexID[] = {'X', 'r', 'v', 'c', 'b'};
  *		blockType - verse, chapter, book, etc.
  */
 
+zVerse4::zVerse4(const zVerse4 &other) : zVerse4(other.path, other.fileMode, other.blockType, other.compressor->clone()) {}
+
+
 zVerse4::zVerse4(const char *ipath, int fileMode, int blockType, SWCompress *icomp)
 {
+	this->fileMode = fileMode; this->blockType = blockType;
 	// this line, instead of just defaulting, to keep FileMgr out of header
 	if (fileMode == -1) fileMode = FileMgr::RDONLY;
 

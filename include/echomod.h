@@ -34,6 +34,8 @@ class SWDLLEXPORT EchoMod : public SWText {
 public:
 	EchoMod();
 	virtual ~EchoMod();
+	EchoMod(const EchoMod &other) : SWText(other) {}
+	virtual SWModule *clone() const { return new EchoMod(*this); }
 	virtual SWBuf &getRawEntryBuf() const;
 };
 

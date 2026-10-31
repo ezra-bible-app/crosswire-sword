@@ -107,8 +107,17 @@ SWModule.prototype.SEARCHTYPE_ENTRYATTR = -3;
 SWModule.prototype.SEARCHTYPE_LUCENE    = -4;
 
 SWModule.prototype.SEARCHOPTION_ICASE   = 2;
+// search flags (SWModule::SEARCHFLAG_*)
+SWModule.prototype.SEARCHFLAG_MATCHWHOLEENTRY  = 4096;	// entry-attribute searches: the whole value, not a substring
+SWModule.prototype.SEARCHFLAG_STRICTBOUNDARIES = 8192;	// multiword/regex: no hits across verse boundaries
 
 
+// callback(error): the key's error for this positioning, 0 for none, e.g.
+// KEYERR_OUTOFBOUNDS (1) when keyText names nothing in the module's
+// versification -- the key has then gone to its bound (asking a Hebrew Bible
+// for James leaves it at the first verse of its last book).  The answer comes
+// with the call itself; popError afterwards still returns it, but that is a
+// second call and others may be scheduled on the module between the two.
 SWModule.prototype.setKeyText = function(keyText, callback) {
 	var retVal = null;
 	exec(callback?callback:function(r) { retVal = r; },
@@ -372,10 +381,16 @@ SWMgr.prototype.addExtraConfig = function(confBlob, callback) {
 	return retVal;
 }
 
-SWMgr.prototype.startBibleSync = function(appName, userName, passphrase, callback) {
+// options (all optional; the plugin's defaults otherwise):
+//   repeatCount    how many more times each verse is sent, since nobody resends multicast (2)
+//   repeatDelayMS  at least this long between those (500)
+//   peerLifetimeS  a peer not heard from for this many seconds is given up (1800)
+SWMgr.prototype.startBibleSync = function(appName, userName, passphrase, callback, options) {
+	var o = options || {};
+	var opt = function(v) { return (typeof v === 'number' && v >= 0) ? Math.floor(v) : -1; };
 	exec(callback,
 		function(err) { utils.alert('[ERROR] problem: ' + err); },
-		"SWORD", "SWMgr_startBibleSync", [appName, userName, passphrase]
+		"SWORD", "SWMgr_startBibleSync", [appName, userName, passphrase, opt(o.repeatCount), opt(o.repeatDelayMS), opt(o.peerLifetimeS)]
 	);
 }
 
@@ -383,6 +398,16 @@ SWMgr.prototype.stopBibleSync = function() {
 	exec(function() {},
 		function(err) { utils.alert('[ERROR] problem: ' + err); },
 		"SWORD", "SWMgr_stopBibleSync", []
+	);
+}
+
+// whether a running BibleSync session is still worth keeping (after sleep or
+// the background): { state: 'off'|'alive'|'disabled'|'moved', alive, interface,
+// current }; null where the platform cannot say
+SWMgr.prototype.getBibleSyncStatus = function(callback) {
+	exec(callback,
+		function(err) { callback(null); },
+		"SWORD", "SWMgr_getBibleSyncStatus", []
 	);
 }
 
@@ -425,6 +450,38 @@ SWMgr.prototype.translate = function(text, locale, callback) {
 	);
 }
 
+// The engine's global text options ("Strong's Numbers", "Headings",
+// "Words of Christ in Red", ...): the names on offer given the installed
+// modules, the values each accepts ("On"/"Off" or a list), the current
+// value, and a one-line description.
+SWMgr.prototype.getGlobalOptions = function(callback) {
+	exec(callback?callback:function() {},
+		function(err) { if (callback) callback([]); },
+		"SWORD", "SWMgr_getGlobalOptions", []
+	);
+}
+
+SWMgr.prototype.getGlobalOptionValues = function(option, callback) {
+	exec(callback?callback:function() {},
+		function(err) { if (callback) callback([]); },
+		"SWORD", "SWMgr_getGlobalOptionValues", [option]
+	);
+}
+
+SWMgr.prototype.getGlobalOption = function(option, callback) {
+	exec(callback?callback:function() {},
+		function(err) { if (callback) callback(''); },
+		"SWORD", "SWMgr_getGlobalOption", [option]
+	);
+}
+
+SWMgr.prototype.getGlobalOptionTip = function(option, callback) {
+	exec(callback?callback:function() {},
+		function(err) { if (callback) callback(''); },
+		"SWORD", "SWMgr_getGlobalOptionTip", [option]
+	);
+}
+
 SWMgr.prototype.setGlobalOption = function(option, value, callback) {
 	exec(callback?callback:function() {},
 		function(err) { utils.alert('[ERROR] problem: ' + err); },
@@ -432,10 +489,154 @@ SWMgr.prototype.setGlobalOption = function(option, value, callback) {
 	);
 }
 
+// the sword:// or bible:// link the app was opened with, once; '' when none
+SWMgr.prototype.getLaunchUrl = function(callback) {
+	exec(callback, function(err) { utils.alert('[ERROR] problem: ' + err); }, "SWORD", "SWMgr_getLaunchUrl", []);
+}
+
 SWMgr.prototype.getPrefixPath = function(callback) {
 	exec(callback?callback:function() {},
 		function(err) { utils.alert('[ERROR] problem: ' + err); },
 		"SWORD", "SWMgr_getPrefixPath", []
+	);
+}
+
+// A folder shared between SWORD apps used as the module library (Android:
+// a Storage Access Framework document tree).  Calls back with its uri, or ""
+// if the app is using its private storage only.
+SWMgr.prototype.getSharedStorage = function(callback) {
+	exec(callback?callback:function() {},
+		function(err) { utils.alert('[ERROR] problem: ' + err); },
+		"SWORD", "SWMgr_getSharedStorage", []
+	);
+}
+
+// Let the user pick (or create) a shared library folder.  SWORD is
+// re-initialized on it.  Calls back with the folder's uri, or "" if the user
+// cancelled.  Module lists should be refreshed afterward.
+SWMgr.prototype.chooseSharedStorage = function(callback) {
+	exec(callback?callback:function() {},
+		function(err) { utils.alert('[ERROR] problem: ' + err); },
+		"SWORD", "SWMgr_chooseSharedStorage", []
+	);
+}
+
+// Stop using a shared library folder; back to private storage only.
+SWMgr.prototype.clearSharedStorage = function(callback) {
+	exec(callback?callback:function() {},
+		function(err) { utils.alert('[ERROR] problem: ' + err); },
+		"SWORD", "SWMgr_clearSharedStorage", []
+	);
+}
+
+// Where the app should keep small per-user study data (bookmarks/, ...):
+// the separately chosen data folder if there is one, else beside the module
+// library.  Ends in '/'.
+SWMgr.prototype.getDataPath = function(callback) {
+	exec(callback?callback:function() {},
+		function(err) { utils.alert('[ERROR] problem: ' + err); },
+		"SWORD", "SWMgr_getDataPath", []
+	);
+}
+
+// The study-data folder chosen separately from the library (Android: a SAF
+// document tree, which may live on a cloud provider such as Drive).  Calls
+// back with its uri, or "" if study data lives beside the library.
+SWMgr.prototype.getDataStorage = function(callback) {
+	exec(callback?callback:function() {},
+		function(err) { utils.alert('[ERROR] problem: ' + err); },
+		"SWORD", "SWMgr_getDataStorage", []
+	);
+}
+
+// Let the user pick a study-data folder.  SWORD is re-initialized.  Calls
+// back with the folder's uri, or "" if the user cancelled.
+// provider (iOS): the name the user chose the folder under ("iCloud Drive",
+// ...), kept for the label describeTree answers; Android ignores it
+SWMgr.prototype.chooseDataStorage = function(callback, provider) {
+	exec(callback?callback:function() {},
+		function(err) { utils.alert('[ERROR] problem: ' + err); },
+		"SWORD", "SWMgr_chooseDataStorage", [provider || ""]
+	);
+}
+
+// iOS (SWORD.features.dataFiles): pick study-data FILES in place, several at
+// once, where a provider (e.g. Google Drive) grants no folder; they appear
+// under getDataPath() as bookmarks/.  Answers "files:<provider>", or "" if cancelled.
+SWMgr.prototype.chooseDataFiles = function(callback, provider) {
+	exec(callback?callback:function() {},
+		function(err) { utils.alert('[ERROR] problem: ' + err); },
+		"SWORD", "SWMgr_chooseDataFiles", [provider || ""]
+	);
+}
+
+// iOS (SWORD.features.dataFiles): put the bookmark files Bishop has now onto a
+// provider without folder access (e.g. Google Drive), as sword-studydata/
+// bookmarks/*.conf: the user saves that folder there, then opens the files
+// once; they become the picked files.  Answers "files:<provider>", or "" if
+// cancelled.
+SWMgr.prototype.exportDataFiles = function(callback, provider) {
+	exec(callback?callback:function() {},
+		function(err) { utils.alert('[ERROR] problem: ' + err); },
+		"SWORD", "SWMgr_exportDataFiles", [provider || ""]
+	);
+}
+
+// A human label for a granted folder uri, "<provider app> / <folder>"
+// (e.g. "Drive / sword-bookmarks"); "" if it can't be described.
+SWMgr.prototype.describeTree = function(uri, callback) {
+	exec(callback?callback:function() {},
+		function(err) { if (callback) callback(''); },
+		"SWORD", "SWMgr_describeTree", [uri]
+	);
+}
+
+// Keep study data beside the module library again.
+SWMgr.prototype.clearDataStorage = function(callback) {
+	exec(callback?callback:function() {},
+		function(err) { utils.alert('[ERROR] problem: ' + err); },
+		"SWORD", "SWMgr_clearDataStorage", []
+	);
+}
+
+// Plain file access, routed through the engine's FileMgr so that paths under
+// the shared library (getPrefixPath()) work whether it is private storage or
+// a SAF folder.  Meant for small user data kept beside the library, e.g.
+// bookmarks/*.conf.  Each calls back (result, err); err is set on failure
+// and is never reported with an alert.
+SWMgr.prototype.readFile = function(path, callback) {
+	exec(function(contents) { if (callback) callback(contents); },
+		function(err) { if (callback) callback(null, err); },
+		"SWORD", "SWMgr_readFile", [path]
+	);
+}
+
+SWMgr.prototype.writeFile = function(path, contents, callback) {
+	exec(function() { if (callback) callback(true); },
+		function(err) { if (callback) callback(false, err); },
+		"SWORD", "SWMgr_writeFile", [path, contents]
+	);
+}
+
+// Entry names; subdirectories carry a trailing "/".
+SWMgr.prototype.listDir = function(path, callback) {
+	exec(function(names) { if (callback) callback(names); },
+		function(err) { if (callback) callback([], err); },
+		"SWORD", "SWMgr_listDir", [path]
+	);
+}
+
+SWMgr.prototype.removeFile = function(path, callback) {
+	exec(function() { if (callback) callback(true); },
+		function(err) { if (callback) callback(false, err); },
+		"SWORD", "SWMgr_removeFile", [path]
+	);
+}
+
+SWMgr.prototype.mkdir = function(path, callback) {
+	exec(function() { if (callback) callback(true); },
+		function(err) { if (callback) callback(false, err); },
+		"SWORD", "SWMgr_mkdir", [path]
 	);
 }
 
@@ -446,7 +647,7 @@ HTTPUtils.prototype.METHOD_POST =  1;
 
 HTTPUtils.prototype.makeRequest = function(url, postData, callback, method) {
 	var result = null;
-	if (!method) method = this.METHOD_POST;
+	if (method === undefined || method === null) method = this.METHOD_POST;	// METHOD_GET is 0
 	exec(callback?callback:function(r) { if (r && r.length > 0) result = r; },
 		function(err) { utils.alert('[ERROR] problem: ' + err); },
 		"SWORD", "HTTPUtils_makeRequest", [url, postData, method]
@@ -478,6 +679,9 @@ function SWORD() {
 
 	this.available = false;
 	this.version = null;
+	// what this platform's plugin offers, e.g. { dataStorage: true, sharedStorage: false };
+	// null from a plugin which does not say
+	this.features = null;
 
 	this.installMgr = new InstallMgr();
 	this.mgr        = new SWMgr();
@@ -487,6 +691,7 @@ function SWORD() {
 		me.init(function(info) {
 			me.available = true;
 			me.version = info.version;
+			me.features = info.features || null;
 			channel.onSWORDReady.fire();
 		},function(e) {
 			me.available = false;

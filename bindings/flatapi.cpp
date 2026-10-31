@@ -30,6 +30,7 @@
 #include <installmgr.h>
 #include <remotetrans.h>
 #include <versekey.h>
+#include <versificationmgr.h>
 #include <treekeyidx.h>
 #include <filemgr.h>
 #include <stringmgr.h>
@@ -41,6 +42,7 @@
 
 #ifdef BIBLESYNC
 #include <biblesync.hh>
+#include <mutex>
 #endif
 
 #include "corba/orbitcpp/webmgr.hpp"
@@ -58,6 +60,8 @@ using sword::TreeKeyIdx;
 #define GETSWMGR(handle, failReturn) HandleSWMgr *hmgr = (HandleSWMgr *)handle; if (!hmgr) return failReturn; WebMgr *mgr = hmgr->mgr; if (!mgr) return failReturn;
 
 #define GETSWMODULE(handle, failReturn) HandleSWModule *hmod = (HandleSWModule *)handle; if (!hmod) return failReturn; SWModule *module = hmod->mod; if (!module) return failReturn;
+
+#define GETSWKEY(handle, failReturn) HandleSWKey *hkey = (HandleSWKey *)handle; if (!hkey) return failReturn; SWKey *key = hkey->key; if (!key) return failReturn;
 
 #define GETINSTMGR(handle, failReturn) HandleInstMgr *hinstmgr = (HandleInstMgr *)handle; if (!hinstmgr) return failReturn; InstallMgr *installMgr = hinstmgr->installMgr; if (!installMgr) return failReturn;
 
@@ -108,7 +112,7 @@ void percentUpdate(char percent, void *userData) {
 	struct pu *p = (struct pu *)userData;
 
 	if (percent != p->last) {
-		p->progressReporter((int)percent);
+		if (p->progressReporter) p->progressReporter((int)percent);	// a caller may pass no reporter
 		p->last = percent;
 	}
 }
@@ -118,22 +122,47 @@ void percentUpdate(char percent, void *userData) {
 using std::string;
 BibleSync *bibleSync = 0;
 org_biblesync_MessageReceivedCallback bibleSyncListener = 0;
+#ifdef BIBLESYNC
+// the library keeps no lock of its own; its receive loop runs on a thread
+// of ours while the page's sends and questions arrive on another, so every
+// call into it holds this
+std::mutex bibleSyncMutex;
+#endif
+// what the app may set before a start (setBibleSyncOptions)
+int bibleSyncRepeatCount = 2;		// each verse goes out this many more times
+int bibleSyncRepeatDelayMS = 500;	// at least this far apart
+int bibleSyncPeerLifetimeS = 1800;	// a silent peer is given up after this long
 
 void bibleSyncCallback(char cmd, string pkt_uuid, string bible, string ref, string alt, string group, string domain, string info, string dump) {
 SWLOGD("bibleSync callback msg: %c; pkt_uuid: %s; bible: %s; ref: %s; alt: %s; group: %s; domain: %s; info: %s; dump: %s", cmd, pkt_uuid.c_str(), bible.c_str(), ref.c_str(), alt.c_str(), group.c_str(), domain.c_str(), info.c_str(), dump.c_str());
 	if (bibleSyncListener) {
 SWLOGD("bibleSync listener is true");
 		switch(cmd) {
-		// error
+		// error: the library has shut itself down (a failed transmit, a
+		// network setup error); the app must hear, or it shows a sync as
+		// sent which went nowhere
 		case 'E':
-		// mismatch
+			(*bibleSyncListener)(cmd, info.c_str(), dump.c_str());
+			break;
+		// mismatch (another passphrase): not ours to report
 		case 'M':
-		// new speaker
+			break;
+		// new speaker: the library listens to the first speaker only;
+		// a study group wants every phone in the room heard
 		case 'S':
-		// dead speaker
-		case 'D':
-		// announce
+			if (bibleSync) bibleSync->listenToSpeaker(true, pkt_uuid);
+			(*bibleSyncListener)(cmd, (bible + " @ " + ref).c_str(), (group + "; " + domain + "; " + pkt_uuid).c_str());
+			break;
+		// a peer: announced itself ('A') or is a speaker we now listen to
+		// ('S').  The library puts the user in bible, the address in ref, the
+		// app and version in group, the device in domain; its uuid identifies
+		// it across these and the 'D' below
 		case 'A':
+			(*bibleSyncListener)(cmd, (bible + " @ " + ref).c_str(), (group + "; " + domain + "; " + pkt_uuid).c_str());
+			break;
+		// a speaker went quiet: only its uuid is known
+		case 'D':
+			(*bibleSyncListener)(cmd, pkt_uuid.c_str(), "");
 			break;
 		// chat message
 		case 'C': {
@@ -190,6 +219,23 @@ public:
 
 };
 
+class HandleSWKey {
+public:
+	SWKey *key;
+	bool owned;		// a clone: the handle deletes the key
+	const char **children;
+	SWBuf parent;
+
+	HandleSWKey(SWKey *key = 0, bool owned = false) : key(key), owned(owned), children(0) {}
+	~HandleSWKey() {
+		clearChildren();
+		if (owned) delete key;
+	}
+	void clearChildren() {
+		clearStringArray(&children);
+	}
+};
+
 class HandleSWModule {
 public:
 	SWModule *mod;
@@ -202,9 +248,9 @@ public:
 	org_crosswire_sword_SearchHit *searchHits;
 	const char **entryAttributes;
 	const char **parseKeyList;
-	const char **keyChildren;
+	HandleSWKey keyView;	// the module's own key, as a key handle
 
-	HandleSWModule(SWModule *mod) : searchHits(0), entryAttributes(0), parseKeyList(0), keyChildren(0) {
+	HandleSWModule(SWModule *mod) : searchHits(0), entryAttributes(0), parseKeyList(0) {
 		this->mod = mod;
 		this->renderBuf = 0;
 		this->stripBuf = 0;
@@ -221,7 +267,12 @@ public:
 		clearSearchHits();
 		clearEntryAttributes();
 		clearParseKeyList();
-		clearKeyChildren();
+	}
+
+	// the module's current key: setKey replaces the object, so look it up each time
+	HandleSWKey *key() {
+		keyView.key = mod ? mod->getKey() : 0;
+		return &keyView;
 	}
 
 	void clearSearchHits() {
@@ -241,9 +292,6 @@ public:
 	}
 	void clearParseKeyList() {
 		clearStringArray(&parseKeyList);
-	}
-	void clearKeyChildren() {
-		clearStringArray(&keyChildren);
 	}
 };
 
@@ -651,43 +699,60 @@ const char ** SWDLLEXPORT org_crosswire_sword_SWModule_parseKeyList
 	return retVal;
 }
 
+// the VerseKey conveniences of setKeyText: "+book", "-chapter" (a step),
+// "=text" (intros, no normalizing).  True when keyText was one of them,
+// with the key's error for the move in err.
+static bool verseKeyStep(SWKey *key, const char *keyText, char *err) {
+	sword::VerseKey *vkey = SWDYNAMIC_CAST(VerseKey, key);
+	if (!vkey) return false;
+	if ((*keyText=='+' || *keyText=='-')) {
+		if (!sword::stricmp(keyText+1, "book")) {
+			vkey->popError();	// an error left from before is not this move's
+			vkey->setBook(vkey->getBook() + ((*keyText=='+')?1:-1));
+			*err = vkey->getError();
+			return true;
+		}
+		else if (!sword::stricmp(keyText+1, "chapter")) {
+			vkey->popError();
+			vkey->setChapter(vkey->getChapter() + ((*keyText=='+')?1:-1));
+			*err = vkey->getError();
+			return true;
+		}
+	}
+	else if (*keyText=='=') {
+		vkey->popError();
+		vkey->setIntros(true);
+		vkey->setAutoNormalize(false);
+		vkey->setText(keyText+1);
+		*err = vkey->getError();
+		return true;
+	}
+	return false;
+}
+
 /*
  * Class:     org_crosswire_sword_SWModule
  * Method:    setKeyText
- * Signature: (Ljava/lang/String;)V
+ * Signature: (Ljava/lang/String;)C
  */
 // Special values handled for VerseKey modules:
 //	[+-][book|chapter]	- [de|in]crement by chapter or book
 //	(e.g.	"+chapter" will increment the VerseKey 1 chapter)
 //	[=][key]		- position absolutely and don't normalize
 //	(e.g.	"jn.1.0" for John Chapter 1 intro; "jn.0.0" For Book of John Intro)
-void SWDLLEXPORT org_crosswire_sword_SWModule_setKeyText
+// Returns the key's error for this positioning, as SWModule::setKeyText does
+// (0, or e.g. KEYERR_OUTOFBOUNDS when the text names nothing in the module's
+// versification and the key has gone to its bound); the error stays set, so
+// a popError afterwards answers the same.  -1 for a bad handle.
+char SWDLLEXPORT org_crosswire_sword_SWModule_setKeyText
   (SWHANDLE hSWModule, const char *keyText) {
 
-	GETSWMODULE(hSWModule, );
+	GETSWMODULE(hSWModule, -1);
 
-	sword::SWKey *key = module->getKey();
-	sword::VerseKey *vkey = SWDYNAMIC_CAST(VerseKey, key);
-	if (vkey) {
-		if ((*keyText=='+' || *keyText=='-')) {
-			if (!sword::stricmp(keyText+1, "book")) {
-				vkey->setBook(vkey->getBook() + ((*keyText=='+')?1:-1));
-				return;
-			}
-			else if (!sword::stricmp(keyText+1, "chapter")) {
-				vkey->setChapter(vkey->getChapter() + ((*keyText=='+')?1:-1));
-				return;
-			}
-		}
-		else if (*keyText=='=') {
-			vkey->setIntros(true);
-			vkey->setAutoNormalize(false);
-			vkey->setText(keyText+1);
-			return;
-		}
-	}
+	char err = 0;
+	if (verseKeyStep(module->getKey(), keyText, &err)) return err;
 
-	module->setKey(keyText);
+	return module->setKey(keyText);
 }
 
 /*
@@ -705,6 +770,19 @@ const char * SWDLLEXPORT org_crosswire_sword_SWModule_getKeyText
 
 /*
  * Class:     org_crosswire_sword_SWModule
+ * Method:    getKey
+ * Signature: ()J
+ */
+SWHANDLE SWDLLEXPORT org_crosswire_sword_SWModule_getKey
+  (SWHANDLE hSWModule) {
+
+	GETSWMODULE(hSWModule, 0);
+
+	return (SWHANDLE)hmod->key();
+}
+
+/*
+ * Class:     org_crosswire_sword_SWModule
  * Method:    hasKeyChildren
  * Signature: ()Z
  */
@@ -713,14 +791,7 @@ char SWDLLEXPORT org_crosswire_sword_SWModule_hasKeyChildren
 
 	GETSWMODULE(hSWModule, 0);
 
-	sword::SWKey *key = module->getKey();
-	char retVal = 0;
-
-	TreeKeyIdx *tkey = SWDYNAMIC_CAST(TreeKeyIdx, key);
-	if (tkey) {
-		retVal = tkey->hasChildren()?1:0;
-	}
-	return retVal;
+	return org_crosswire_sword_SWKey_hasChildren((SWHANDLE)hmod->key());
 }
 
 /*
@@ -737,63 +808,7 @@ const char ** SWDLLEXPORT org_crosswire_sword_SWModule_getKeyChildren
 
 	GETSWMODULE(hSWModule, 0);
 
-	hmod->clearKeyChildren();
-
-	sword::SWKey *key = module->getKey();
-	const char **retVal = 0;
-	int count = 0;
-
-	sword::VerseKey *vkey = SWDYNAMIC_CAST(VerseKey, key);
-	if (vkey) {
-		retVal = (const char **)calloc(12, sizeof(const char *));
-		SWBuf num;
-		num.appendFormatted("%d", vkey->getTestament());
-		stdstr((char **)&(retVal[0]), num.c_str());
-		num = "";
-		num.appendFormatted("%d", vkey->getBook());
-		stdstr((char **)&(retVal[1]), num.c_str());
-		num = "";
-		num.appendFormatted("%d", vkey->getChapter());
-		stdstr((char **)&(retVal[2]), num.c_str());
-		num = "";
-		num.appendFormatted("%d", vkey->getVerse());
-		stdstr((char **)&(retVal[3]), num.c_str());
-		num = "";
-		num.appendFormatted("%d", vkey->getChapterMax());
-		stdstr((char **)&(retVal[4]), num.c_str());
-		num = "";
-		num.appendFormatted("%d", vkey->getVerseMax());
-		stdstr((char **)&(retVal[5]), num.c_str());
-		stdstr((char **)&(retVal[6]), vkey->getBookName());
-		stdstr((char **)&(retVal[7]), vkey->getOSISRef());
-		stdstr((char **)&(retVal[8]), vkey->getShortText());
-		stdstr((char **)&(retVal[9]), vkey->getBookAbbrev());
-		stdstr((char **)&(retVal[10]), vkey->getOSISBookName());
-	}
-	else {
-		TreeKeyIdx *tkey = SWDYNAMIC_CAST(TreeKeyIdx, key);
-		if (tkey) {
-			if (tkey->firstChild()) {
-				do {
-					count++;
-				}
-				while (tkey->nextSibling());
-				tkey->parent();
-			}
-			retVal = (const char **)calloc(count+1, sizeof(const char *));
-			count = 0;
-			if (tkey->firstChild()) {
-				do {
-					stdstr((char **)&(retVal[count++]), assureValidUTF8(tkey->getLocalName()));
-				}
-				while (tkey->nextSibling());
-				tkey->parent();
-			}
-		}
-	}
-
-	hmod->keyChildren = retVal;
-	return retVal;
+	return org_crosswire_sword_SWKey_getChildren((SWHANDLE)hmod->key());
 }
 
 /*
@@ -850,21 +865,9 @@ const char * SWDLLEXPORT org_crosswire_sword_SWModule_getCategory
 const char * SWDLLEXPORT org_crosswire_sword_SWModule_getKeyParent
   (SWHANDLE hSWModule) {
 
-	static SWBuf retVal;
-
 	GETSWMODULE(hSWModule, 0);
 
-	sword::SWKey *key = module->getKey();
-
-	retVal = "";
-
-	TreeKeyIdx *tkey = SWDYNAMIC_CAST(TreeKeyIdx, key);
-	if (tkey) {
-		if (tkey->parent()) {
-			retVal = tkey->getText();
-		}
-	}
-	return assureValidUTF8(retVal.c_str());
+	return org_crosswire_sword_SWKey_getParent((SWHANDLE)hmod->key());
 }
 
 /*
@@ -1567,6 +1570,221 @@ void SWDLLEXPORT org_crosswire_sword_StringMgr_setToUpper
 }
 
 /*
+ * Class:     org_crosswire_sword_SWKey
+ * Method:    clone
+ * Signature: ()J
+ */
+SWHANDLE SWDLLEXPORT org_crosswire_sword_SWKey_clone
+  (SWHANDLE hSWKey) {
+
+	GETSWKEY(hSWKey, 0);
+
+	SWKey *copy = key->clone();
+	return copy ? (SWHANDLE)new HandleSWKey(copy, true) : 0;
+}
+
+/*
+ * Class:     org_crosswire_sword_SWKey
+ * Method:    delete
+ * Signature: ()V
+ */
+void SWDLLEXPORT org_crosswire_sword_SWKey_delete
+  (SWHANDLE hSWKey) {
+
+	HandleSWKey *hkey = (HandleSWKey *)hSWKey;
+	if (hkey && hkey->owned) delete hkey;
+}
+
+/*
+ * Class:     org_crosswire_sword_SWKey
+ * Method:    setText
+ * Signature: (Ljava/lang/String;)C
+ */
+char SWDLLEXPORT org_crosswire_sword_SWKey_setText
+  (SWHANDLE hSWKey, const char *keyText) {
+
+	GETSWKEY(hSWKey, -1);
+
+	char err = 0;
+	if (verseKeyStep(key, keyText, &err)) return err;
+
+	key->popError();
+	key->setText(keyText);
+	return key->getError();
+}
+
+/*
+ * Class:     org_crosswire_sword_SWKey
+ * Method:    getText
+ * Signature: ()Ljava/lang/String;
+ */
+const char * SWDLLEXPORT org_crosswire_sword_SWKey_getText
+  (SWHANDLE hSWKey) {
+
+	GETSWKEY(hSWKey, 0);
+
+	return key->getText();
+}
+
+/*
+ * Class:     org_crosswire_sword_SWKey
+ * Method:    popError
+ * Signature: ()C
+ */
+char SWDLLEXPORT org_crosswire_sword_SWKey_popError
+  (SWHANDLE hSWKey) {
+
+	GETSWKEY(hSWKey, -1);
+
+	return key->popError();
+}
+
+/*
+ * Class:     org_crosswire_sword_SWKey
+ * Method:    begin
+ * Signature: ()V
+ */
+void SWDLLEXPORT org_crosswire_sword_SWKey_begin
+  (SWHANDLE hSWKey) {
+
+	GETSWKEY(hSWKey, );
+
+	key->setPosition(sword::TOP);
+}
+
+/*
+ * Class:     org_crosswire_sword_SWKey
+ * Method:    next
+ * Signature: ()V
+ */
+void SWDLLEXPORT org_crosswire_sword_SWKey_next
+  (SWHANDLE hSWKey) {
+
+	GETSWKEY(hSWKey, );
+
+	key->increment();
+}
+
+/*
+ * Class:     org_crosswire_sword_SWKey
+ * Method:    previous
+ * Signature: ()V
+ */
+void SWDLLEXPORT org_crosswire_sword_SWKey_previous
+  (SWHANDLE hSWKey) {
+
+	GETSWKEY(hSWKey, );
+
+	key->decrement();
+}
+
+/*
+ * Class:     org_crosswire_sword_SWKey
+ * Method:    hasChildren
+ * Signature: ()Z
+ */
+char SWDLLEXPORT org_crosswire_sword_SWKey_hasChildren
+  (SWHANDLE hSWKey) {
+
+	GETSWKEY(hSWKey, 0);
+
+	TreeKeyIdx *tkey = SWDYNAMIC_CAST(TreeKeyIdx, key);
+	return (tkey && tkey->hasChildren()) ? 1 : 0;
+}
+
+/*
+ * Class:     org_crosswire_sword_SWKey
+ * Method:    getChildren
+ * Signature: ()[Ljava/lang/String;
+ */
+const char ** SWDLLEXPORT org_crosswire_sword_SWKey_getChildren
+  (SWHANDLE hSWKey) {
+
+	GETSWKEY(hSWKey, 0);
+
+	hkey->clearChildren();
+	const char **retVal = 0;
+	int count = 0;
+
+	sword::VerseKey *vkey = SWDYNAMIC_CAST(VerseKey, key);
+	if (vkey) {
+		retVal = (const char **)calloc(13, sizeof(const char *));
+		SWBuf num;
+		num.appendFormatted("%d", vkey->getTestament());
+		stdstr((char **)&(retVal[0]), num.c_str());
+		num = "";
+		num.appendFormatted("%d", vkey->getBook());
+		stdstr((char **)&(retVal[1]), num.c_str());
+		num = "";
+		num.appendFormatted("%d", vkey->getChapter());
+		stdstr((char **)&(retVal[2]), num.c_str());
+		num = "";
+		num.appendFormatted("%d", vkey->getVerse());
+		stdstr((char **)&(retVal[3]), num.c_str());
+		num = "";
+		num.appendFormatted("%d", vkey->getChapterMax());
+		stdstr((char **)&(retVal[4]), num.c_str());
+		num = "";
+		num.appendFormatted("%d", vkey->getVerseMax());
+		stdstr((char **)&(retVal[5]), num.c_str());
+		stdstr((char **)&(retVal[6]), vkey->getBookName());
+		stdstr((char **)&(retVal[7]), vkey->getOSISRef());
+		stdstr((char **)&(retVal[8]), vkey->getShortText());
+		stdstr((char **)&(retVal[9]), vkey->getBookAbbrev());
+		stdstr((char **)&(retVal[10]), vkey->getOSISBookName());
+		// the named collection the book belongs to ("Appendix"), if any
+		const VersificationMgr::System *vsys = VersificationMgr::getSystemVersificationMgr()->getVersificationSystem(vkey->getVersificationSystem());
+		int bookNum = vsys ? vsys->getBookNumberByOSISName(vkey->getOSISBookName()) : -1;
+		stdstr((char **)&(retVal[11]), (bookNum > 0) ? vsys->getBook(bookNum-1)->getCollectionName() : "");
+	}
+	else {
+		TreeKeyIdx *tkey = SWDYNAMIC_CAST(TreeKeyIdx, key);
+		if (tkey) {
+			if (tkey->firstChild()) {
+				do {
+					count++;
+				}
+				while (tkey->nextSibling());
+				tkey->parent();
+			}
+			retVal = (const char **)calloc(count+1, sizeof(const char *));
+			count = 0;
+			if (tkey->firstChild()) {
+				do {
+					stdstr((char **)&(retVal[count++]), assureValidUTF8(tkey->getLocalName()));
+				}
+				while (tkey->nextSibling());
+				tkey->parent();
+			}
+		}
+	}
+
+	hkey->children = retVal;
+	return retVal;
+}
+
+/*
+ * Class:     org_crosswire_sword_SWKey
+ * Method:    getParent
+ * Signature: ()Ljava/lang/String;
+ */
+const char * SWDLLEXPORT org_crosswire_sword_SWKey_getParent
+  (SWHANDLE hSWKey) {
+
+	GETSWKEY(hSWKey, 0);
+
+	hkey->parent = "";
+
+	TreeKeyIdx *tkey = SWDYNAMIC_CAST(TreeKeyIdx, key);
+	if (tkey) {
+		if (tkey->parent()) {
+			hkey->parent = assureValidUTF8(tkey->getText());
+		}
+	}
+	return hkey->parent.c_str();
+}
+
+/*
  * Class:     org_crosswire_sword_InstallMgr
  * Method:    new
  * Signature: (Ljava/lang/String;Lorg/crosswire/sword/SWModule/SearchProgressReporter;)V
@@ -1840,8 +2058,21 @@ SWLOGD("libsword: sendBibleSyncMessage() bibleSync not active; message not sent.
 	const char *modNamePrefix = osisRef.stripPrefix(':');
 	if (modNamePrefix) modName = modNamePrefix;
 
-	BibleSync_xmit_status result = bibleSync->Transmit(modName.c_str(), osisRef.c_str());
+	BibleSync_xmit_status result;
+	{
+		std::lock_guard<std::mutex> hold(bibleSyncMutex);
+		if (!bibleSync) return;
+		result = bibleSync->Transmit(modName.c_str(), osisRef.c_str());
+	}
 SWLOGD("libsword: sendBibleSyncMessage() finished with status code: %d", result);
+	// a send the library declined before the socket (a failed sendto it
+	// reports itself): the app hears why, instead of showing the verse as sent
+	if (result != BSP_XMIT_OK && bibleSyncListener) {
+		static const char *why[] = { "ok", "failed", "no socket", "bad message type", "an audience member cannot transmit", "still receiving" };
+		SWBuf info = "BibleSync: Transmit refused: ";
+		info += (result >= 0 && result < 6) ? why[result] : "unknown status";
+		(*bibleSyncListener)('E', info.c_str(), "");
+	}
 #else
 SWLOGD("libsword: sendBibleSyncMessage() bibleSync not active; message not sent.");
 #endif
@@ -1879,25 +2110,102 @@ SWLOGD("startBibleSync() sleeping 3 seconds");
 	bibleSyncListener = callback;
 SWLOGD("startBibleSync - calling init");
 
+	std::unique_lock<std::mutex> hold(bibleSyncMutex);
 	if (!bibleSync) {
 SWLOGD("bibleSync initializing c-tor");
 		bibleSync = new BibleSync(appName.c_str(), (const char *)SWVersion().currentVersion, userName.c_str());
+		// nobody resends multicast and Wi-Fi loses some: each verse goes out
+		// more than once, and a peer is not given up for a few lost beacons.
+		// Receive() below is called every 2 seconds: a beacon every 5th call
+		// is one every 10 seconds, as the library intends
+		bibleSync->setBeaconCount(5);
+#ifdef BSP_REPEAT_MAX
+		bibleSync->setRepeat(bibleSyncRepeatCount, bibleSyncRepeatDelayMS);
+		int lifetime = bibleSyncPeerLifetimeS / 10;
+		bibleSync->setBeaconMultiplier(lifetime > 255 ? 255 : lifetime);
+#endif
 SWLOGD("bibleSync initializing setMode");
 		bibleSync->setMode(BSP_MODE_PERSONAL, bibleSyncCallback, passphrase.c_str());
 	}
+	// which interface it is on: the app shows it, so a wrong one is seen
+	if (bibleSync && bibleSyncListener) {
+#ifdef BSP_REPEAT_MAX
+		SWBuf iface = bibleSync->getInterface().c_str();
+#else
+		SWBuf iface = "";
+#endif
+		(*bibleSyncListener)('I', iface.c_str(), 0);
+	}
 SWLOGD("startBibleSync - starting while listener");
 	starting = false;
+	hold.unlock();
 	while(bibleSyncListener) {
 SWLOGD("bibleSyncListener - while loop iteration");
-		BibleSync::Receive(bibleSync);
+		{
+			std::lock_guard<std::mutex> hold(bibleSyncMutex);
+			BibleSync::Receive(bibleSync);
+		}
 SWLOGD("bibleSyncListener - sleeping for 2 seconds");
 		sleep(2);
 	}
+	hold.lock();
 	delete bibleSync;
 	bibleSync = 0;
+	hold.unlock();
 #else
 SWLOGD("registerBibleSyncListener: !!! BibleSync disabled in native code.");
 #endif
+}
+
+
+/*
+ * Class:     org_crosswire_sword_SWMgr
+ * Method:    setBibleSyncOptions
+ * Signature: (III)V
+ *
+ * For the next startBibleSync; a negative value leaves that one as it is.
+ * repeatCount: how many more times each verse is sent (default 2);
+ * repeatDelayMS: at least this long between those (default 500);
+ * peerLifetimeS: a peer not heard from for this many seconds is given up (default 1800)
+ */
+void SWDLLEXPORT org_crosswire_sword_SWMgr_setBibleSyncOptions
+		(SWHANDLE hMgr, int repeatCount, int repeatDelayMS, int peerLifetimeS) {
+
+#ifdef BIBLESYNC
+	if (repeatCount >= 0) bibleSyncRepeatCount = repeatCount;
+	if (repeatDelayMS >= 0) bibleSyncRepeatDelayMS = repeatDelayMS;
+	if (peerLifetimeS >= 0) bibleSyncPeerLifetimeS = peerLifetimeS;
+#endif
+}
+
+
+/*
+ * Class:     org_crosswire_sword_SWMgr
+ * Method:    getBibleSyncStatus
+ * Signature: ()Ljava/lang/String;
+ *
+ * "off" (not running), "alive <address>",
+ * "disabled <address>" (the library shut itself down) or
+ * "moved <address> <address now>" (the network changed under it)
+ */
+const char * SWDLLEXPORT org_crosswire_sword_SWMgr_getBibleSyncStatus
+		(SWHANDLE hMgr) {
+
+	static SWBuf status;
+	status = "off";
+#if defined(BIBLESYNC) && defined(BSP_REPEAT_MAX)
+	// whether the session a resumed app finds is still worth keeping
+	std::lock_guard<std::mutex> hold(bibleSyncMutex);
+	// (a libbiblesync older than its sync repeats cannot say: "off")
+	if (bibleSync && ::bibleSyncListener) {
+		SWBuf joined = bibleSync->getInterface().c_str();
+		SWBuf now = bibleSync->getCurrentInterface().c_str();
+		if (bibleSync->getMode() == BSP_MODE_DISABLE) status = SWBuf("disabled ") + joined;
+		else if (joined != now) status = SWBuf("moved ") + joined + " " + now;
+		else status = SWBuf("alive ") + joined;
+	}
+#endif
+	return status.c_str();
 }
 
 
@@ -1914,6 +2222,7 @@ SWLOGD("stopBibleSync()");
 	// if we have a listen loop going, just break the loop; the bibleSync cleanup will happen there
 	if (::bibleSyncListener) ::bibleSyncListener = 0;
 	else if (bibleSync) {
+		std::lock_guard<std::mutex> hold(bibleSyncMutex);
 		delete bibleSync;
 		bibleSync = 0;
 	}

@@ -36,6 +36,7 @@ class SWBuf;
 class SWDLLEXPORT RawVerse {
 
 private:
+	int fileMode;
 	static int instance;		// number of instantiated RawVerse objects or derivitives
 
 protected:
@@ -49,6 +50,8 @@ protected:
 public:
 	static const char nl;
 	RawVerse(const char *ipath, int fileMode = -1);
+	/** copy, with its own file descriptors */
+	RawVerse(const RawVerse &other);
 	virtual ~RawVerse();
 	void findOffset(char testmt, long idxoff, long *start,	unsigned short *end) const;
 	void readText(char testmt, long start, unsigned short size, SWBuf &buf) const;

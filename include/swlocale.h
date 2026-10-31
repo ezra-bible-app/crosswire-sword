@@ -71,6 +71,13 @@ public:
 	virtual const char *translate(const char *text);
 	virtual void augment(SWLocale &addFrom);
 	virtual SWLocale & operator +=(SWLocale &addFrom) { augment(addFrom); return *this; }
+	/** the locale's own [Book Abbrevs] entries, sorted; nothing merged in.
+	 * VersificationMgr::System::getBookAbbrevs merges these over the
+	 * builtin English table and a system's own additions */
+	virtual const struct abbrev *getLocaleBookAbbrevs(int *retSize);
+	/** @deprecated the builtin English table with this locale's entries
+	 * merged in, as before 1.9; use
+	 * VersificationMgr::System::getBookAbbrevs(locale) instead */
 	virtual const struct abbrev *getBookAbbrevs(int *retSize);
 	static const char *DEFAULT_LOCALE_NAME;
 };

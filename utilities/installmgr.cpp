@@ -51,6 +51,7 @@ SWBuf confPath;
 
 bool isConfirmedByForce;
 bool isUnvPeerAllowed;
+bool isForgetInstallSource;
 
 
 void usage(const char *progName = 0, const char *error = 0);
@@ -177,11 +178,16 @@ void init() {
 		if (isConfirmedByForce) { 
 			installMgr->setUserDisclaimerConfirmed(true);
 		}
+		if (isForgetInstallSource) {
+			installMgr->setForgetInstallSource(true);
+		}
 	}
 }
 
 
 // clean up and exit if status is 0 or negative error code
+//   -1 usage error; -2 SWORD not configured; -3 remote source not found;
+//   -4 module not found; -5 install or refresh failed; -6 cancelled by user
 void finish(int status) {
 	delete statusReporter;
 	delete installMgr;
@@ -202,9 +208,12 @@ void createBasicConfig(bool enableRemote, bool addCrossWire, bool unverifiedPeer
 	remove(confPath.c_str());
 
 	InstallSource is("FTP");
+
+	// Add CrossWire repo as a starting point
 	is.caption = "CrossWire";
 	is.source = "ftp.crosswire.org";
 	is.directory = "/pub/sword/raw";
+	is.uid = "20081216195754";
 
 	SWConfig config(confPath.c_str());
 	config["General"]["PassiveFTP"] = "true";
@@ -224,6 +233,7 @@ void initConfig() {
 	bool allowed = isUnverifiedPeerAllowed();
 
 	createBasicConfig(enable, true, allowed);
+	installMgr->readInstallConf();	// so any commands which follow in this run use the new config
 
 	cout << "\n\nInitialized basic config file at [" << confPath << "]\n";
 	cout << "with remote source features " << ((enable) ? "ENABLED" : "DISABLED") << "\n";
@@ -278,6 +288,13 @@ void listRemoteSources(bool namesOnly = false) {
 			cout << "\tType     : " << it->second->type << "\n";
 			cout << "\tSource   : " << it->second->source << "\n";
 			cout << "\tDirectory: " << it->second->directory << "\n";
+			// sources which share a caption are chained and tried in order
+			for (InstallSource *is = it->second->chainedSource; is; is = is->chainedSource) {
+				cout << "\t  falls back to:\n";
+				cout << "\t  Type     : " << is->type << "\n";
+				cout << "\t  Source   : " << is->source << "\n";
+				cout << "\t  Directory: " << is->directory << "\n";
+			}
 		}
 	}
 }
@@ -291,9 +308,16 @@ void refreshRemoteSource(const char *sourceName) {
 		finish(-3);
 	}
 
-	if (!installMgr->refreshRemoteSource(source->second))
-		cout << "\nRemote Source Refreshed\n";
-	else	cerr << "\nError Refreshing Remote Source\n";
+	int error = installMgr->refreshRemoteSource(source->second);
+	if (error == -1) {
+		cerr << "\nRefresh cancelled\n";
+		finish(-6);
+	}
+	else if (error) {
+		cerr << "\nError Refreshing Remote Source (" << error << ")\n";
+		finish(-5);
+	}
+	cout << "\nRemote Source Refreshed\n";
 }
 
 
@@ -386,9 +410,15 @@ void remoteInstallModule(const char *sourceName, const char *modName) {
 	}
 
 	int error = installMgr->installModule(mgr, 0, module->getName(), is);
-	if (error) {
-		cout << "\nError installing module: [" << module->getName() << "] (write permissions?)\n";
-	} else cout << "\nInstalled module: [" << module->getName() << "]\n";
+	if (error == -1) {
+		cerr << "\nInstall cancelled: [" << module->getName() << "]\n";
+		finish(-6);
+	}
+	else if (error) {
+		cerr << "\nError installing module: [" << module->getName() << "] (" << error << ")\n";
+		finish(-5);
+	}
+	cout << "\nInstalled module: [" << module->getName() << "]\n";
 }
 
 
@@ -402,8 +432,10 @@ void localDirInstallModule(const char *dir, const char *modName) {
 	}
 	int error = installMgr->installModule(mgr, dir, module->getName());
 	if (error) {
-		cout << "\nError installing module: [" << module->getName() << "] (write permissions?)\n";
-	} else cout << "\nInstalled module: [" << module->getName() << "]\n";
+		cerr << "\nError installing module: [" << module->getName() << "] (" << error << "; write permissions?)\n";
+		finish(-5);
+	}
+	cout << "\nInstalled module: [" << module->getName() << "]\n";
 }
 
 
@@ -442,6 +474,7 @@ void usage(const char *progName, const char *error) {
 		"\t -ll <path>\t\t\tlist available modules at local path\n"
 		"\t -li <path> <modName>\t\tinstall module from local path\n"
 		"\t -d\t\t\t\tturn debug output on\n"
+		"\t -xr\t\t\t\tdon't record from where module was installed\n"
 		, (progName ? progName : "installmgr"), SWVersion::currentVersion.getText());
 	finish(-1);
 }
@@ -451,6 +484,7 @@ int main(int argc, char **argv) {
 	
 	isConfirmedByForce = false;
 	isUnvPeerAllowed = false;
+	isForgetInstallSource = false;
 	
 	if (argc < 2) usage(*argv);
 
@@ -463,6 +497,9 @@ int main(int argc, char **argv) {
 		}
 		else if (!strcmp(argv[i], "--allow-unverified-tls-peer")) {
 			isUnvPeerAllowed = true;
+		}
+		else if (!strcmp(argv[i], "-xr")) {
+			isForgetInstallSource = true;
 		}
 		else if (!strcmp(argv[i], "-init")) {
 			initConfig();

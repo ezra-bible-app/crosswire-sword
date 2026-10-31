@@ -37,11 +37,14 @@ class SWDLLEXPORT ZipCompress : public SWCompress {
 public:
 	ZipCompress();
 	virtual ~ZipCompress();
+	ZipCompress(const ZipCompress &other) : SWCompress(other) {}
+	virtual SWCompress *clone() const { return new ZipCompress(*this); }
 
 	virtual void encode(void);
 	virtual void decode(void);
 
 	static char unTarGZ(int fd, const char *destPath);
+	static char unZip(const char *sourceZipPath, const char *destPath);
 };
 
 SWORD_NAMESPACE_END

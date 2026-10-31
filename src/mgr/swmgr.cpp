@@ -30,10 +30,12 @@
 #endif
 #include <dirent.h>
 
+#include <set>
 #include <swmgr.h>
 #include <rawtext.h>
 #include <rawtext4.h>
 #include <filemgr.h>
+#include <versificationmgr.h>
 #include <rawgenbook.h>
 #include <rawcom.h>
 #include <rawcom4.h>
@@ -744,32 +746,105 @@ void SWMgr::findConfig(char *configType, char **prefixPath, char **configPath, s
 }
 
 
-void SWMgr::loadConfigDir(const char *ipath)
+void SWMgr::loadConfigDir(const char *ipath, bool skipCache)
 {
 	SWBuf basePath = ipath;
 	if (!basePath.endsWith("/") && !basePath.endsWith("\\")) basePath += "/";
 
 	SWBuf newModFile;
+	newModFile = basePath + "modules-conf.cache";
+	skipCache = skipCache || !FileMgr::existsFile(newModFile.c_str());
 
-	std::vector<DirEntry> dirList = FileMgr::getDirList(ipath);
+	// one listing serves both the staleness check and the rebuild; asking
+	// for size and isDirectory lets a FileOps fill in modTime at the same time
+	std::vector<DirEntry> dirList = FileMgr::getDirList(ipath, true, true);
+
+	// the .conf files the directory holds now, each as one line of name,
+	// size and time.  The cache carries the list it was built from, in a
+	// section of its own (never a module's name); a cache whose list differs
+	// is stale however the times compare: a .conf copied in with an old
+	// date, a provider which reports no times, or a change within the second
+	// of the cache's own write all look current by time alone
+	static const char *cacheListSection = ".cache";
+	std::set<SWBuf> confList;
 	for (unsigned int i = 0; i < dirList.size(); ++i) {
-		//check whether it ends with .conf, if it doesn't skip it!
-		if (!dirList[i].name.endsWith(".conf")) {
-			continue;
-		}
+		if (!dirList[i].name.endsWith(".conf")) continue;
+		if (!dirList[i].modTime)	// 0 = the FileOps didn't know
+			dirList[i].modTime = FileMgr::getFileModTime((basePath + dirList[i].name).c_str());
+		SWBuf line;
+		line.setFormatted("%s|%lu|%ld", dirList[i].name.c_str(), dirList[i].size, dirList[i].modTime);
+		confList.insert(line);
+	}
 
-		newModFile = basePath + dirList[i].name;
-		if (config) {
+	// The cache is only a speedup; it is always safe to throw it away.
+	// If anything in mods.d looks newer than the cache (a .conf added,
+	// removed, or edited by us or by anyone else), wipe it and rebuild.
+	if (!skipCache) {
+		long cacheTime = FileMgr::getFileModTime(newModFile.c_str());
+		if (FileMgr::getFileModTime(ipath) > cacheTime) skipCache = true;
+		else {
+			for (unsigned int i = 0; i < dirList.size() && !skipCache; ++i) {
+				if (!dirList[i].name.endsWith(".conf")) continue;
+				if (dirList[i].modTime > cacheTime) skipCache = true;
+			}
+		}
+	}
+
+	SWConfig *pathConfig = 0;
+
+	// the times passed: the cache is trusted only if the list it carries
+	// is the directory's list (a cache from before the list was kept has
+	// none, and is rebuilt once)
+	if (!skipCache) {
+		pathConfig = new SWConfig(newModFile);
+		SectionMap::iterator cached = pathConfig->getSections().find(cacheListSection);
+		if (cached == pathConfig->getSections().end()) skipCache = true;
+		else {
+			std::set<SWBuf> cachedList;
+			for (ConfigEntMap::iterator it = cached->second.begin(); it != cached->second.end(); ++it) {
+				if (it->first == "Conf") cachedList.insert(it->second);
+			}
+			if (cachedList != confList) skipCache = true;
+			pathConfig->getSections().erase(cached);
+		}
+		if (skipCache) {
+			SWLOGTI("mods.d cache %s does not match the directory's .conf files; rebuilding", newModFile.c_str());
+			delete pathConfig;
+			pathConfig = 0;
+		}
+	}
+
+	if (skipCache) {
+		// assure any cache file is removed
+		FileMgr::removeFile(newModFile.c_str());
+		pathConfig = new SWConfig(newModFile);
+
+		for (unsigned int i = 0; i < dirList.size(); ++i) {
+			//check whether it ends with .conf, if it doesn't skip it!
+			if (!dirList[i].name.endsWith(".conf")) {
+				continue;
+			}
+
+			newModFile = basePath + dirList[i].name;
 			SWConfig tmpConfig(newModFile);
-			config->augment(tmpConfig);
+			pathConfig->augment(tmpConfig);
 		}
-		else	config = myconfig = new SWConfig(newModFile);
+
+		// the list this cache was built from, saved with it and then dropped
+		// from what the modules are read from
+		ConfigEntMap &list = (*pathConfig)[cacheListSection];
+		for (std::set<SWBuf>::iterator it = confList.begin(); it != confList.end(); ++it) {
+			list.insert(ConfigEntMap::value_type("Conf", *it));
+		}
+		pathConfig->save();
+		pathConfig->getSections().erase(cacheListSection);
 	}
 
-	if (!config) {	// if no .conf file exist yet, create a default
-		newModFile = basePath + "globals.conf";
-		config = myconfig = new SWConfig(newModFile);
+	if (config) {
+		config->augment(*pathConfig);
+		delete pathConfig;
 	}
+	else	config = myconfig = pathConfig;
 }
 
 
@@ -914,6 +989,14 @@ SWModule *SWMgr::createModule(const char *name, const char *driver, ConfigEntMap
 	SWBuf lang, sourceformat, encoding;
 	signed char direction, enc, markup;
 
+	// module names and data paths are promised to stay within the library;
+	// frontends build filesystem paths from both, so refuse the makings of
+	// path traversal here rather than trusting every conf
+	if (strstr(name, "..") || strchr(name, '/') || strchr(name, '\\')) {
+		SWLog::getSystemLog()->logWarning("Refusing module with unsafe name: %s", name);
+		return 0;
+	}
+
 	description  = ((entry = section.find("Description")) != section.end()) ? (*entry).second : (SWBuf)"";
 	lang  = ((entry = section.find("Lang")) != section.end()) ? (*entry).second : (SWBuf)"en";
  	sourceformat = ((entry = section.find("SourceType"))  != section.end()) ? (*entry).second : (SWBuf)"";
@@ -936,6 +1019,11 @@ SWModule *SWMgr::createModule(const char *name, const char *driver, ConfigEntMap
 	if (!strncmp(buf2, "./", 2)) { //remove the leading ./ in the module data path to make it look better
 		buf2 += 2;
 	}
+	if (strstr(buf2, "..")) {
+		SWLog::getSystemLog()->logWarning("Refusing module %s: DataPath climbs out of the library: %s", name, buf2);
+		delete [] buf;
+		return 0;
+	}
 	// PrefixPath - absolute directory path to the repository in which this module was found
 	section["PrefixPath"] = datapath;
 	if (*buf2)
@@ -943,6 +1031,32 @@ SWModule *SWMgr::createModule(const char *name, const char *driver, ConfigEntMap
 	delete [] buf;
 
 	section["AbsoluteDataPath"] = datapath;
+
+	// a Bible or commentary may carry its own versification definition as
+	// v11n.xml in its data path.  It registers under the module's own name
+	// -- never replacing an existing system -- and overrides the conf's
+	// Versification value, so a module can bring a custom system and its
+	// mappings without touching anyone else's
+	if (!stricmp(driver, "zText") || !stricmp(driver, "zText4")
+			|| !stricmp(driver, "RawText") || !stricmp(driver, "RawText4")
+			|| !stricmp(driver, "zCom") || !stricmp(driver, "zCom4")
+			|| !stricmp(driver, "RawCom") || !stricmp(driver, "RawCom4")
+			|| !stricmp(driver, "RawFiles") || !stricmp(driver, "HREFCom")) {
+		SWBuf v11nPath = datapath;
+		if (!v11nPath.endsWith("/") && !v11nPath.endsWith("\\")) {
+			// a file-prefix style DataPath: look beside it
+			int i;
+			for (i = (int)v11nPath.length()-1; i >= 0 && v11nPath[(unsigned long)i] != '/' && v11nPath[(unsigned long)i] != '\\'; i--);
+			v11nPath.setSize(i+1);
+		}
+		v11nPath += "v11n.xml";
+		if (FileMgr::existsFile(v11nPath.c_str())) {
+			if (VersificationMgr::getSystemVersificationMgr()->registerVersificationSystemFromXML(v11nPath.c_str(), name)) {
+				versification = name;
+				section["Versification"] = versification;
+			}
+		}
+	}
 
 	if (!stricmp(sourceformat.c_str(), "GBF"))
 		markup = FMT_GBF;

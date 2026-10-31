@@ -61,6 +61,7 @@ protected:
 	long timeoutMillis;
 	bool term;
 	bool unverifiedPeerAllowed;
+	SWBuf caInfo;
 	SWBuf host;
 	SWBuf u;
 	SWBuf p;
@@ -73,7 +74,11 @@ public:
 	 * override this method in your real impl
 	 *
 	 * if destBuf then write to buffer instead of file
-	 * @return -1 operation error (e.g., resource not found); -2 connection error (e.g., connection timeout or login failure); -3 user requested termination
+	 * @return 0 success; -1 user requested termination; < -1 some kind of problem.
+	 *   Clients typically only care about these three cases.  Which problem is
+	 *   transport specific, e.g., the CURL transports report: -2 connection error
+	 *   (e.g., connect timeout); -3 access denied; -4 resource not found; -5 http error;
+	 *   -10-CURLcode for any other libcurl error
 	 */
 	virtual char getURL(const char *destPath, const char *sourceURL, SWBuf *destBuf = 0);
 
@@ -81,11 +86,14 @@ public:
 	 * override this method in your real impl
 	 *
 	 * if sourceBuf then read from buffer instead of file
-	 * @return -1 operation error (e.g., permission denied); -2 connection error (e.g., connection timeout or login failure); -3 user requested termination
+	 * @return 0 success; -1 user requested termination; < -1 some kind of problem (see getURL)
 	 */
 	virtual char putURL(const char *destURL, const char *sourcePath, SWBuf *sourceBuf = 0);
 
 
+	/** network copy recursively a remote directory
+	 * @return 0 success; -1 user requested termination; < -1 some kind of problem (see getURL)
+	 */
 	int copyDirectory(const char *urlPrefix, const char *dir, const char *dest, const char *suffix);
 
 	virtual std::vector<struct DirEntry> getDirList(const char *dirURL);
@@ -97,6 +105,11 @@ public:
 	void setPasswd(const char *passwd) { p = passwd; }
 	void setUnverifiedPeerAllowed(bool val) { this->unverifiedPeerAllowed = val; }
 	bool isUnverifiedPeerAllowed() { return unverifiedPeerAllowed; }
+
+	/** a PEM bundle of CA certificates to verify peers against (curl's
+	 * CURLOPT_CAINFO); empty leaves the transport's built-in default */
+	void setCAInfo(const char *caInfo) { this->caInfo = caInfo ? caInfo : ""; }
+	const char *getCAInfo() const { return caInfo.c_str(); }
 	void terminate() { term = true; }
 };
 

@@ -1,13 +1,12 @@
 apply plugin: 'com.android.application'
 
 android {
-    compileSdkVersion 30
-    buildToolsVersion '30.0.2'
+    compileSdk 33
 
     defaultConfig {
         applicationId "org.crosswire.android.sword"
-        minSdkVersion 14
-        targetSdkVersion 30
+        minSdk 24
+        targetSdk 33
         versionCode 1
         versionName "1.0"
 
@@ -24,28 +23,42 @@ android {
         release {
             minifyEnabled true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.debug
         }
         debug {
-            jniDebuggable = false
+            jniDebuggable = true
         }
     }
 
     externalNativeBuild {
         cmake {
             path "src/main/cpp/CMakeLists.txt"
-            version "3.10.2"
+            version "3.22.1"
         }
     }
     flavorDimensions 'Fast'
-    ndkVersion '21.3.6528147'
+    ndkVersion '29.0.14206865'
+    namespace 'org.crosswire.android.sword'
+    buildFeatures.prefab = true
 }
+
 
 dependencies {
     implementation fileTree(dir: 'libs', include: ['*.jar'])
-
-    implementation 'androidx.appcompat:appcompat:1.2.0'
-    implementation 'androidx.constraintlayout:constraintlayout:2.0.1'
+    // OpenSSL and curl are our own prefab builds (16 KB page-aligned, NDK 29);
+    // see ../../prefab-repo and the ndkports notes in ../../README
+    implementation 'org.crosswire.ndkports:openssl:3.5.8'
+    implementation 'org.crosswire.ndkports:curl:8.22.0'
+    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+    implementation 'androidx.appcompat:appcompat:1.6.1'
     testImplementation 'junit:junit:4.13'
-    androidTestImplementation 'androidx.test.ext:junit:1.1.2'
-    androidTestImplementation 'androidx.test.espresso:espresso-core:3.3.0'
+    androidTestImplementation 'androidx.test.ext:junit:1.1.5'
+    androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
 }
+
+android {
+    defaultConfig {
+        externalNativeBuild {
+            cmake {
+                arguments "-DANDROID_STL=c++_shared"
+            }}}}

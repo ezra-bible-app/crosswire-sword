@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<osis xmlns="http://www.bibletechnologies.net/2003/OSIS/namespace" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+<osisText osisIDWork="TestCustom" osisRefWork="bible" xml:lang="en">
+<header><work osisWork="TestCustom"><title>v11n XML testsuite fixture</title></work></header>
+<div type="book" osisID="Gen">
+<chapter osisID="Gen.1">
+<verse osisID="Gen.1.1">In the beginning.</verse>
+<verse osisID="Gen.1.2">And the earth.</verse>
+</chapter>
+<chapter osisID="Gen.2">
+<verse osisID="Gen.2.1">Thus the heavens.</verse>
+</chapter>
+</div>
+<div type="book" osisID="FVD">
+<chapter osisID="FVD.1">
+<verse osisID="FVD.1.1">The fourteenth vision begins.</verse>
+<verse osisID="FVD.1.2">And the vision continues.</verse>
+</chapter>
+</div>
+<div type="book" osisID="Matt">
+<chapter osisID="Matt.1">
+<verse osisID="Matt.1.1">The book of the generation.</verse>
+</chapter>
+<chapter osisID="Matt.2">
+<verse osisID="Matt.2.1">Now when Jesus was born.</verse>
+</chapter>
+</div>
+</osisText>
+</osis>

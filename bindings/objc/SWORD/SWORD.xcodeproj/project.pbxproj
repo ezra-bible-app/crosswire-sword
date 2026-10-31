@@ -40,10 +40,9 @@
 		0A22C5791FCF2A0E00C02113 /* markupfiltmgr.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0A22C5651FCF2A0B00C02113 /* markupfiltmgr.cpp */; };
 		0A22C57A1FCF2A0E00C02113 /* localemgr.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0A22C5661FCF2A0B00C02113 /* localemgr.cpp */; };
 		0A22C57B1FCF2A0E00C02113 /* stringmgr.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0A22C5671FCF2A0B00C02113 /* stringmgr.cpp */; };
-		0A22C57C1FCF2A0E00C02113 /* curlftpt.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0A22C5681FCF2A0C00C02113 /* curlftpt.cpp */; };
 		0A22C57D1FCF2A0E00C02113 /* swsearchable.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0A22C5691FCF2A0C00C02113 /* swsearchable.cpp */; };
 		0A22C57E1FCF2A0E00C02113 /* ftplibftpt.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0A22C56A1FCF2A0C00C02113 /* ftplibftpt.cpp */; };
-		0A22C57F1FCF2A0E00C02113 /* curlhttpt.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0A22C56B1FCF2A0C00C02113 /* curlhttpt.cpp */; };
+		0A22C57F1FCF2A0E00C02113 /* nsurlhttpt.mm in Sources */ = {isa = PBXBuildFile; fileRef = 0A22C56B1FCF2A0C00C02113 /* nsurlhttpt.mm */; };
 		0A22C5801FCF2A0E00C02113 /* swconfig.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0A22C56C1FCF2A0D00C02113 /* swconfig.cpp */; };
 		0A22C5811FCF2A0E00C02113 /* filemgr.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0A22C56D1FCF2A0D00C02113 /* filemgr.cpp */; };
 		0A22C5821FCF2A0E00C02113 /* swfiltermgr.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0A22C56E1FCF2A0D00C02113 /* swfiltermgr.cpp */; };
@@ -214,10 +213,9 @@
 		0A22C5651FCF2A0B00C02113 /* markupfiltmgr.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = markupfiltmgr.cpp; path = ../../../src/mgr/markupfiltmgr.cpp; sourceTree = "<group>"; };
 		0A22C5661FCF2A0B00C02113 /* localemgr.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = localemgr.cpp; path = ../../../src/mgr/localemgr.cpp; sourceTree = "<group>"; };
 		0A22C5671FCF2A0B00C02113 /* stringmgr.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = stringmgr.cpp; path = ../../../src/mgr/stringmgr.cpp; sourceTree = "<group>"; };
-		0A22C5681FCF2A0C00C02113 /* curlftpt.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = curlftpt.cpp; path = ../../../src/mgr/curlftpt.cpp; sourceTree = "<group>"; };
 		0A22C5691FCF2A0C00C02113 /* swsearchable.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = swsearchable.cpp; path = ../../../src/mgr/swsearchable.cpp; sourceTree = "<group>"; };
 		0A22C56A1FCF2A0C00C02113 /* ftplibftpt.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = ftplibftpt.cpp; path = ../../../src/mgr/ftplibftpt.cpp; sourceTree = "<group>"; };
-		0A22C56B1FCF2A0C00C02113 /* curlhttpt.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = curlhttpt.cpp; path = ../../../src/mgr/curlhttpt.cpp; sourceTree = "<group>"; };
+		0A22C56B1FCF2A0C00C02113 /* nsurlhttpt.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = nsurlhttpt.mm; path = ../../../src/mgr/nsurlhttpt.mm; sourceTree = "<group>"; };
 		0A22C56C1FCF2A0D00C02113 /* swconfig.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = swconfig.cpp; path = ../../../src/mgr/swconfig.cpp; sourceTree = "<group>"; };
 		0A22C56D1FCF2A0D00C02113 /* filemgr.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = filemgr.cpp; path = ../../../src/mgr/filemgr.cpp; sourceTree = "<group>"; };
 		0A22C56E1FCF2A0D00C02113 /* swfiltermgr.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = swfiltermgr.cpp; path = ../../../src/mgr/swfiltermgr.cpp; sourceTree = "<group>"; };
@@ -371,8 +369,7 @@
 				0AD80315203BE13D0080C00C /* biblesync.hh */,
 				0AC2147C1FCF9CFF0058DE8C /* flatapi.cpp */,
 				0A22C6031FCF2B5500C02113 /* cipherfil.cpp */,
-				0A22C5681FCF2A0C00C02113 /* curlftpt.cpp */,
-				0A22C56B1FCF2A0C00C02113 /* curlhttpt.cpp */,
+				0A22C56B1FCF2A0C00C02113 /* nsurlhttpt.mm */,
 				0A22C55F1FCF2A0A00C02113 /* encfiltmgr.cpp */,
 				0A22C5A51FCF2B0D00C02113 /* entriesblk.cpp */,
 				0A22C56D1FCF2A0D00C02113 /* filemgr.cpp */,
@@ -681,7 +678,6 @@
 				0A22C63D1FCF2B5600C02113 /* thmlheadings.cpp in Sources */,
 				0A22C58F1FCF2A8D00C02113 /* listkey.cpp in Sources */,
 				0A22C64E1FCF2B5600C02113 /* thmlvariants.cpp in Sources */,
-				0A22C57C1FCF2A0E00C02113 /* curlftpt.cpp in Sources */,
 				0A22C5B21FCF2B0D00C02113 /* entriesblk.cpp in Sources */,
 				0A22C5AD1FCF2B0D00C02113 /* swcomprs.cpp in Sources */,
 				0A22C5281FCF295E00C02113 /* url.cpp in Sources */,
@@ -748,7 +744,7 @@
 				0A22C63A1FCF2B5600C02113 /* osismorph.cpp in Sources */,
 				0A22C5741FCF2A0E00C02113 /* remotetrans.cpp in Sources */,
 				0A22C6321FCF2B5600C02113 /* osiswordjs.cpp in Sources */,
-				0A22C57F1FCF2A0E00C02113 /* curlhttpt.cpp in Sources */,
+				0A22C57F1FCF2A0E00C02113 /* nsurlhttpt.mm in Sources */,
 				0A22C5971FCF2ABC00C02113 /* swlog.cpp in Sources */,
 				0A22C66F1FCF2E5300C02113 /* rawld.cpp in Sources */,
 				0A22C6241FCF2B5600C02113 /* osisvariants.cpp in Sources */,
@@ -833,7 +829,6 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				HEADER_SEARCH_PATHS = (
 					"$(PROJECT_DIR)/../../../include",
-					"$(PROJECT_DIR)/../dependencies/curl/include",
 					"$(PROJECT_DIR)/../../../../biblesync/include",
 				);
 				IPHONEOS_DEPLOYMENT_TARGET = 9.0;
@@ -845,11 +840,10 @@
 					"-D__unix__",
 					"-DEXCLUDEBZIP2",
 					"-DEXCLUDEXZ",
-					"-DCURLAVAILABLE",
+					"-DNSURLAVAILABLE",
 					"-DBIBLESYNC",
 				);
 				OTHER_LDFLAGS = (
-					"-lcurl",
 					"-lz",
 					"-licucore",
 				);
@@ -903,7 +897,6 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				HEADER_SEARCH_PATHS = (
 					"$(PROJECT_DIR)/../../../include",
-					"$(PROJECT_DIR)/../dependencies/curl/include",
 					"$(PROJECT_DIR)/../../../../biblesync/include",
 				);
 				IPHONEOS_DEPLOYMENT_TARGET = 9.0;
@@ -914,11 +907,10 @@
 					"-D__unix__",
 					"-DEXCLUDEBZIP2",
 					"-DEXCLUDEXZ",
-					"-DCURLAVAILABLE",
+					"-DNSURLAVAILABLE",
 					"-DBIBLESYNC",
 				);
 				OTHER_LDFLAGS = (
-					"-lcurl",
 					"-lz",
 					"-licucore",
 				);

@@ -197,6 +197,17 @@ public:
 	 */
 	virtual ~SWModule();
 
+	/**
+	 * An independent instance of this module, positioned where this one
+	 * is: own file descriptors, key and entry buffer; config and filters
+	 * shared with the manager.  Use one per thread.  Caller deletes.
+	 * Returns 0 if the driver does not support cloning.
+	 */
+	virtual SWModule *clone() const { return 0; }
+
+	/** copy: own key (cloned), entry buffer and filter lists; config and filters shared */
+	SWModule(const SWModule &other);
+
 	/** Gets and clears error status
 	 *
 	 * @return error status

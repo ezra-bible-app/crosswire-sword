@@ -47,6 +47,7 @@ public:
 			SWTextMarkup markup = FMT_UNKNOWN, const char* ilang = 0, bool strongsPadding = true);
 	
 	virtual ~SWLD();
+	SWLD(const SWLD &other);
 	virtual SWKey *createKey() const;
 
 	/** gets module KeyText, getting from saved key if key is persistent

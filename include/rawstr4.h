@@ -35,6 +35,7 @@ class SWBuf;
 class SWDLLEXPORT RawStr4 {
 
 private:
+	int fileMode;
 	static int instance;		// number of instantiated RawStr4 objects or derivitives
 	char *path;
 	bool caseSensitive;
@@ -51,6 +52,8 @@ protected:
 public:
 	static const char nl;
 	RawStr4(const char *ipath, int fileMode = -1, bool caseSensitive = false);
+	/** copy, with its own file descriptors */
+	RawStr4(const RawStr4 &other);
 	virtual ~RawStr4();
 	void getIDXBuf(long ioffset, char **buf) const;
 	void getIDXBufDat(long ioffset, char **buf) const;

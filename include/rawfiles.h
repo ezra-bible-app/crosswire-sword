@@ -42,6 +42,9 @@ public:
 			SWTextDirection dir = DIRECTION_LTR, SWTextMarkup markup = FMT_UNKNOWN,
 			const char *ilang = 0);
 	virtual ~RawFiles();
+	/** copy, with its own file descriptors */
+	RawFiles(const RawFiles &other) : RawVerse(other), SWCom(other) {}
+	virtual SWModule *clone() const { return new RawFiles(*this); }
 	virtual SWBuf &getRawEntryBuf() const;
 
 	// write interface ----------------------------

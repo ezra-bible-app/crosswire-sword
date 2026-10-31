@@ -183,6 +183,17 @@ SWLOGD("getting file %s\n", sourcePath.c_str());
 		retVal = FtpGet(0, sourcePath, FTPLIB_IMAGE, ftpConnection) - 1;
 	}
 	if (fd > 0) FileMgr::closeFile(fd);
+	// ftplib answers 1 for success, 0 for any failure (so retVal is 0 or -1);
+	// report failures as CURLFTPTransport does, so that -1 means only the
+	// user's cancel: InstallMgr stops on -1, but on "not found" (-4) goes on
+	// to copy a module file by file when a source has no packages/*.zip
+	if (retVal) {
+		const char *resp = FtpLastResponse(ftpConnection);
+		if (this->term) retVal = -1;
+		else if (resp && !strncmp(resp, "550", 3)) retVal = -4;	// no such file
+		else if (resp && !strncmp(resp, "530", 3)) retVal = -3;	// not logged in
+		else retVal = -10;
+	}
 SWLOGD("FTPLibFTPTransport - returning: %d\n", retVal);
 	return retVal;
 }

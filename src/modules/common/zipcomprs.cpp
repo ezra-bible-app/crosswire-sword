@@ -37,6 +37,7 @@
 #endif
 extern "C" {
 #include "zlib.h"
+#include "internal/unzip/unzip.h"
 }
 
 /* This untar code is largely lifted from zlib untgz.c
@@ -97,6 +98,20 @@ int getoct(char *p, int width) {
 }
 
 
+/* verify the checksum of a tar header block so we notice when what we
+ * were handed is not actually a tar archive (e.g., an html error page)
+ */
+bool validTarHeader(union tar_buffer &buffer) {
+	unsigned int sum = 0;
+	for (int i = 0; i < BLOCKSIZE; ++i) {
+		// the checksum is computed with the chksum field itself taken as spaces
+		if (i >= 148 && i < 156) sum += ' ';
+		else sum += (unsigned char)buffer.buffer[i];
+	}
+	return sum == (unsigned int)getoct(buffer.header.chksum, 8);
+}
+
+
 int untar(gzFile in, const char *dest) {
 	union  tar_buffer buffer;
 	int    len;
@@ -104,19 +119,26 @@ int untar(gzFile in, const char *dest) {
 	int    getheader = 1;
 	int    remaining = 0;
 	int    outFD = 0;
+	int    retVal = 0;
 	sword::SWBuf  fname;
 	time_t tartime;
 
 	while (1) {
 		len = gzread(in, &buffer, BLOCKSIZE);
-		if (len < 0)
+		if (len < 0) {
 			sword::SWLog::getSystemLog()->logError(gzerror(in, &err));
+			retVal = -1;
+			break;
+		}
 		/*
 		* Always expect complete blocks to process
 		* the tar information.
 		*/
-		if (len != BLOCKSIZE)
+		if (len != BLOCKSIZE) {
 			sword::SWLog::getSystemLog()->logError("gzread: incomplete block read");
+			if (len) retVal = -1;
+			break;
+		}
 
 		/*
 		* If we have to get a tar header
@@ -129,10 +151,26 @@ int untar(gzFile in, const char *dest) {
 			*/
 			if ((len == 0)  || (buffer.header.name[0]== 0)) break;
 
+			if (!validTarHeader(buffer)) {
+				sword::SWLog::getSystemLog()->logError("untar: invalid tar header; not a tar archive?");
+				retVal = -2;
+				break;
+			}
+
 			tartime = (time_t)getoct(buffer.header.mtime,12);
 			fname = dest;
 			if (!fname.endsWith("/") && !fname.endsWith("\\")) fname += '/';
 			fname += buffer.header.name;
+
+			// don't let an archive write outside of dest
+			sword::SWBuf entryName = buffer.header.name;
+			if (entryName == ".." || entryName.startsWith("../") || entryName.endsWith("/..") || strstr(entryName.c_str(), "/../")) {
+				sword::SWLog::getSystemLog()->logError("untar: skipping suspicious entry %s", buffer.header.name);
+				remaining = getoct(buffer.header.size,12);
+				getheader = (remaining) ? 0 : 1;
+				outFD = 0;
+				continue;
+			}
 
 			switch (buffer.header.typeflag) {
 			case DIRTYPE: {
@@ -211,7 +249,8 @@ int untar(gzFile in, const char *dest) {
 			}
 		}
 	}
-	return 0;
+	if (outFD > 0) sword::FileMgr::closeFile(outFD);
+	return retVal;
 }
 
 }  // end anon namespace
@@ -225,7 +264,7 @@ SWORD_NAMESPACE_START
 
 ZipCompress::ZipCompress() : SWCompress()
 {
-//	fprintf(stderr, "init compress\n");
+//	SWLog::getSystemLog()->logError("init compress\n");
 	level = Z_DEFAULT_COMPRESSION;
 }
 
@@ -287,7 +326,7 @@ ZEXTERN int ZEXPORT compress2 OF((Bytef *dest,   uLongf *destLen,
 	zlen = (long) (len*1.001)+15;
 	char *zbuf = new char[zlen+1];
 	if (len) {
-		//printf("Doing compress\n");
+		//SWLog::getSystemLog()->logInfo("Doing compress\n");
 		if (compress2((Bytef*)zbuf, &zlen, (const Bytef*)buf, len, level) != Z_OK) {
 			SWLog::getSystemLog()->logError("ERROR in compression");
 		}
@@ -347,11 +386,11 @@ ZEXTERN int ZEXPORT uncompress OF((Bytef *dest,   uLongf *destLen,
 		chunkbuf = zbuf + zlen;
 	}
 
-	//printf("Decoding complength{%ld} uncomp{%ld}\n", zlen, blen);
+	//SWLog::getSystemLog()->logInfo("Decoding complength{%ld} uncomp{%ld}\n", zlen, blen);
 	if (zlen) {
 		unsigned long blen = zlen*20;	// trust compression is less than 1000%
 		char *buf = new char[blen]; 
-		//printf("Doing decompress {%s}\n", zbuf);
+		//SWLog::getSystemLog()->logInfo("Doing decompress {%s}\n", zbuf);
 		slen = 0;
 		switch (uncompress((Bytef*)buf, &blen, (Bytef*)zbuf, zlen)){
 			case Z_OK: sendChars(buf, blen); slen = blen; break;
@@ -365,7 +404,7 @@ ZEXTERN int ZEXPORT uncompress OF((Bytef *dest,   uLongf *destLen,
 	else {
 		SWLog::getSystemLog()->logError("ERROR: no buffer to decompress!");
 	}
-	//printf("Finished decoding\n");
+	//SWLog::getSystemLog()->logInfo("Finished decoding\n");
 	free (zbuf);
 }
 
@@ -380,6 +419,96 @@ char ZipCompress::unTarGZ(int fd, const char *destPath) {
 	}
 
 	return untar(f, destPath);
+}
+
+
+char ZipCompress::unZip(const char *sourceZipPath, const char *destPath) {
+#define READ_BUFFER_CHUNK_SIZE 8192
+#define MAX_FILENAME_SIZE 4096
+#define PATH_DELIMETER '/'
+
+	SWBuf destRoot = destPath;
+	if (!destRoot.endsWith(PATH_DELIMETER)) destRoot += PATH_DELIMETER;
+
+	char readBuffer[READ_BUFFER_CHUNK_SIZE];
+
+	FileMgr *fileMgr = FileMgr::getSystemFileMgr();
+	unzFile zipFile = unzOpen(sourceZipPath);
+	if (!zipFile) {
+		SWLog::getSystemLog()->logError("ZipFile not found: %s", sourceZipPath);
+		return -1;
+	}
+
+	unz_global_info globalInfo;
+	if (unzGetGlobalInfo(zipFile, &globalInfo ) != UNZ_OK) {
+		SWLog::getSystemLog()->logError("Problem reading zip file: globalInfo\n");
+		unzClose(zipFile);
+		return -2;
+	}
+
+	for (SW_u64 i = 0; i < globalInfo.number_entry; ++i) {
+
+		// if we're not the first iteration, go to next zip file entry
+		if (i) {
+			if (unzGoToNextFile(zipFile) != UNZ_OK) {
+				SWLog::getSystemLog()->logError("Problem reading zip file: goToNextFile");
+				unzClose(zipFile);
+				return -1;
+			}
+		}
+
+		unz_file_info fileInfo;
+		char fileNameBuf[MAX_FILENAME_SIZE];
+		if (unzGetCurrentFileInfo(zipFile, &fileInfo, fileNameBuf, MAX_FILENAME_SIZE, NULL, 0, NULL, 0) != UNZ_OK) {
+			SWLog::getSystemLog()->logError("Problem reading zip file: fileInfo");
+			unzClose(zipFile);
+			return -3;
+		}
+		SWBuf fileName = fileNameBuf;
+
+		if (!fileName.endsWith(PATH_DELIMETER)) {
+			if (unzOpenCurrentFile(zipFile) != UNZ_OK) {
+				SWLog::getSystemLog()->logError("Problem reading zip file: openCurentFile");
+				unzClose(zipFile);
+				return -4;
+			}
+
+			if (fileName.startsWith(PATH_DELIMETER)) fileName << 1;
+			fileName = destRoot + PATH_DELIMETER + fileName;
+			// write out one zip entry to destination
+			fileMgr->createParent(fileName);
+			FileDesc *out = fileMgr->open(fileName, FileMgr::CREAT|FileMgr::TRUNC|FileMgr::RDWR);
+			if (!out) {
+				SWLog::getSystemLog()->logError("Problem extracting zip: output path");
+				unzCloseCurrentFile(zipFile);
+				unzClose(zipFile);
+				return -5;
+			}
+
+			SW_s32 bytesRead = 0;
+			do {
+				bytesRead = unzReadCurrentFile(zipFile, readBuffer, READ_BUFFER_CHUNK_SIZE);
+				if (bytesRead < 0) {
+					SWLog::getSystemLog()->logError("Problem reading zip file: readCurrentFile (%d)", bytesRead);
+					unzCloseCurrentFile(zipFile);
+					unzClose(zipFile);
+					return -6;
+				}
+				if (bytesRead > 0) {
+					out->write(readBuffer, bytesRead);
+				}
+			}
+			while (bytesRead > 0);
+
+			fileMgr->close(out);
+
+			unzCloseCurrentFile(zipFile);
+		}
+
+	}
+
+	unzClose(zipFile);
+	return 0;
 }
 
 

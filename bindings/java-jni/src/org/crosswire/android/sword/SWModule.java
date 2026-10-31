@@ -30,6 +30,8 @@ public class SWModule {
 	
 	// if this is a shell module from a remote source...
 	private String remoteSourceName;
+	/** native SWModule* of a clone (see clone()); 0 for the manager's module */
+	private long cloneHandle = 0;
 
 
 	public static final int SEARCHTYPE_REGEX     =  1;
@@ -49,6 +51,7 @@ public class SWModule {
 	public static final int VERSEKEY_SHORTTEXT    =  8;
 	public static final int VERSEKEY_BOOKABBREV   =  9;
 	public static final int VERSEKEY_OSISBOOKNAME = 10;
+	public static final int VERSEKEY_COLLECTIONNAME = 11;	// the named collection the book belongs to ("Appendix"), "" for an ordinary OT or NT book
 
 	private SWModule() {}	// don't allow allocation, instead use factory method SWMgr.getModuleByName to retrieve an instance
 	public SWModule(String name, String remoteSourceName) { this.name = name; this.remoteSourceName = remoteSourceName; }	// ok, well, our stub can create a shell with name and remoteSourceName
@@ -73,21 +76,54 @@ public class SWModule {
 
 	// Special values handled for VerseKey modules: [+-][book|chapter]
 	//	(e.g.	"+chapter" will increment the VerseKey 1 chapter)
-	public native void          setKeyText(String key);
+	// returns the key's error for this positioning (0 for none), which error() also still answers
+	public native char          setKeyText(String key);
 
 	public native String        getKeyText();
-	public native boolean       hasKeyChildren();
+
+	/**
+	 * The module's current key.  It belongs to the module (no dispose) and
+	 * is good until the module's key is next set, which replaces the key
+	 * object.  clone() it for a key of your own.
+	 */
+	public SWKey                getKey() {
+		long h = nativeGetKey();
+		return (h != 0) ? new SWKey(h, false) : null;
+	}
+	private native long         nativeGetKey();
+
+	public boolean              hasKeyChildren()	{ SWKey k = getKey(); return (k != null) && k.hasChildren(); }
 
 	// This method returns child nodes for a genbook,
 	// but has special handling if called on a VerseKey module:
 	//  [0..] [VERSEKEY_TESTAMENT, VERSEKEY_BOOK, VERSEKEY_CHAPTER, VERSEKEY_VERSE, VERSEKEY_CHAPTERMAX, ... ]
-	public native String[]      getKeyChildren();
+	public String[]             getKeyChildren()	{ SWKey k = getKey(); return (k != null) ? k.getChildren() : new String[0]; }
 
-	public native String        getKeyParent();
+	public String               getKeyParent()	{ SWKey k = getKey(); return (k != null) ? k.getParent() : ""; }
 	public String               getName()		{ return name; }
 	public String               getDescription()	{ return description; }
 	public String               getCategory()	{ return category; }
 	public String               getRemoteSourceName()	{ return remoteSourceName; }
+
+	/**
+	 * An independent instance of this module for use from another thread
+	 * (SWModule::clone).  Every method of the returned object works on the
+	 * clone.  Call dispose() when done; null if the driver can't clone.
+	 */
+	public SWModule             clone() {
+		long h = nativeClone();
+		if (h == 0) return null;
+		SWModule c = new SWModule(name, remoteSourceName);
+		c.cloneHandle = h;
+		return c;
+	}
+	/** free a clone; the object must not be used afterwards */
+	public void                 dispose() {
+		if (cloneHandle != 0) { nativeDispose(cloneHandle); cloneHandle = 0; }
+	}
+	public boolean              isClone()		{ return cloneHandle != 0; }
+	private native long         nativeClone();
+	private native void         nativeDispose(long handle);
 	public native void          previous();
 	public native void          next();
 	public native void          begin();

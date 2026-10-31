@@ -1,10 +1,13 @@
 #
-# First enter dependencies/ and run make
+# First enter dependencies/ and run make: besides the source packages it
+# fetches the prebuilt SWORD.xcframework into
+# ../cordova/cordova-plugin-crosswire-sword/libs/ios/
 #
-# For Universal libSWORD.a use XCode and compile SWORD/SWORD.xcodeproj
-# then if you'd like to add ios support to the ../cordova bindings,
-# this Makefile in here will copy the Universal lib and other deps
-# to the correct locations
+# To build it yourself instead: SWORD.xcframework is target SWORD of SWORD/SWORD.xcodeproj
+# built for iphoneos and iphonesimulator, then xcodebuild -create-xcframework
+# (the README beside each download on crosswire.org gives the invocations)
+#
+# This Makefile copies the headers the cordova plugin needs.
 #
 # just type: make
 #
@@ -12,11 +15,7 @@
 all: deploycordova
 
 deploycordova:
-	mkdir -p ../cordova/cordova-plugin-crosswire-sword/libs/ios/
-	cp ./dependencies/curl/lib/libcurl.a ../cordova/cordova-plugin-crosswire-sword/libs/ios/
-#	cp ./Build/Debug-iphonesimulator/libSWORD.a ../cordova/cordova-plugin-crosswire-sword/libs/ios/
-#	cp ./Build/Debug-iphoneos/libSWORD.a ../cordova/cordova-plugin-crosswire-sword/libs/ios/
-	cp SWORD/Release-universal/libSWORD.a ../cordova/cordova-plugin-crosswire-sword/libs/ios/
+	mkdir -p ../cordova/cordova-plugin-crosswire-sword/src/ios/
 	cp ../../include/defs.h ../../include/flatapi.h ../cordova/cordova-plugin-crosswire-sword/src/ios/
 
 

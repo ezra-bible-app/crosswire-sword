@@ -89,6 +89,30 @@ SWLog::getSystemLog()->logDebug("libsword: WebMgr c-tor(sysConf)");
 		delete extraConf;
 	}
 
+	// The word filters hold pointers to the default lexicon/parse modules.
+	// Augmenting can replace a module of the same name (the old object is
+	// deleted), so after any augment the defaults are resolved again from
+	// the live module set; otherwise the first Strong's render after, e.g.,
+	// a shared library plus the bundled lexica dereferences a freed module.
+	void refreshDefaultModules() {
+		defaultGreekLex = defaultHebLex = defaultGreekParse = defaultHebParse = 0;
+		for (ModMap::iterator it = Modules.begin(); it != Modules.end(); ++it) {
+			SWModule *module = it->second;
+			if (module->getConfig().has("Feature", "GreekDef") && (!defaultGreekLex || module->getConfig().has("Feature", "GreekDefDefault"))) defaultGreekLex = module;
+			if (module->getConfig().has("Feature", "HebrewDef") && (!defaultHebLex || module->getConfig().has("Feature", "HebrewDefDefault"))) defaultHebLex = module;
+			if (module->getConfig().has("Feature", "GreekParse") && (!defaultGreekParse || module->getConfig().has("Feature", "GreekParseDefault"))) defaultGreekParse = module;
+			if (module->getConfig().has("Feature", "HebrewParse") && (!defaultHebParse || module->getConfig().has("Feature", "HebrewParseDefault"))) defaultHebParse = module;
+		}
+		osisWordJS->setDefaultModules(defaultGreekLex, defaultHebLex, defaultGreekParse, defaultHebParse);
+		thmlWordJS->setDefaultModules(defaultGreekLex, defaultHebLex, defaultGreekParse, defaultHebParse);
+		gbfWordJS->setDefaultModules(defaultGreekLex, defaultHebLex, defaultGreekParse, defaultHebParse);
+	}
+
+	virtual void augmentModules(const char *path, bool multiMod = false) {
+		SWMgr::augmentModules(path, multiMod);
+		refreshDefaultModules();
+	}
+
 	void createAllModules(bool multiMod) {
 
 SWLog::getSystemLog()->logDebug("libsword: WebMgr::createAllModules");
@@ -123,16 +147,24 @@ SWLog::getSystemLog()->logDebug("libsword: WebMgr::createAllModules extraConfig 
 
 		// add our special filters
 		if (module->getConfig().has("Feature", "GreekDef")) {
-			defaultGreekLex = module;
+			if (!defaultGreekLex || module->getConfig().has("Feature", "GreekDefDefault")) {
+				defaultGreekLex = module;
+			}
 		}
 		if (module->getConfig().has("Feature", "HebrewDef")) {
-			defaultHebLex = module;
+			if (!defaultHebLex || module->getConfig().has("Feature", "HebrewDefDefault")) {
+				defaultHebLex = module;
+			}
 		}
 		if (module->getConfig().has("Feature", "GreekParse")) {
-			defaultGreekParse = module;
+			if (!defaultGreekParse || module->getConfig().has("Feature", "GreekParseDefault")) {
+				defaultGreekParse = module;
+			}
 		}
 		if (module->getConfig().has("Feature", "HebrewParse")) {
-			defaultHebParse = module;
+			if (!defaultHebParse || module->getConfig().has("Feature", "HebrewParseDefault")) {
+				defaultHebParse = module;
+			}
 		}
 		if (module->getConfig().has("GlobalOptionFilter", "ThMLVariants")) {
 			OptionFilterMap::iterator it = optionFilters.find("ThMLVariants");

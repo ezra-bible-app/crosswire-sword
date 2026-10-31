@@ -36,6 +36,8 @@ protected:
 public:
 	Bzip2Compress();
 	virtual ~Bzip2Compress();
+	Bzip2Compress(const Bzip2Compress &other) : SWCompress(other) {}
+	virtual SWCompress *clone() const { return new Bzip2Compress(*this); }
 
 	virtual void encode(void);
 	virtual void decode(void);

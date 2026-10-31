@@ -56,8 +56,12 @@ const int RawStr4::IDXENTRYSIZE = 8;
  *		(e.g. 'modules/texts/rawtext/webster/')
  */
 
+RawStr4::RawStr4(const RawStr4 &other) : RawStr4(other.path, other.fileMode, other.caseSensitive) {}
+
+
 RawStr4::RawStr4(const char *ipath, int fileMode, bool caseSensitive) : caseSensitive(caseSensitive)
 {
+	this->fileMode = fileMode;
 	SWBuf buf;
 
 	lastoff = -1;
@@ -405,6 +409,7 @@ void RawStr4::doSetText(const char *ikey, const char *buf, long len) {
 	}
 	else if ((!strcmp(key, dbKey)) && (len>0/*we're not deleting*/)) { // got absolute entry
 		do {
+			delete [] tmpbuf;	// the entry read last time round, a link
 			tmpbuf = new char [ size + 2 ];
 			memset(tmpbuf, 0, size + 2);
 			datfd->seek(start, SEEK_SET);
@@ -433,6 +438,8 @@ void RawStr4::doSetText(const char *ikey, const char *buf, long len) {
 		}
 		while (true);	// while we're resolving links
 	}
+	delete [] tmpbuf;
+	tmpbuf = 0;
 
 	endoff = (SW_u32)idxfd->seek(0, SEEK_END);
 

@@ -145,6 +145,7 @@ SET(sword_base_module_SOURCES
 	src/modules/filters/cipherfil.cpp
 
 	src/modules/filters/rtfhtml.cpp
+	src/modules/filters/rtfplain.cpp
 	src/modules/filters/greeklexattribs.cpp
 	src/modules/filters/papyriplain.cpp
 
@@ -209,6 +210,8 @@ ENDIF(NOT MSVC)
 # Sources relying on ZLib
 SET(sword_zlib_used_SOURCES
 	src/modules/common/zipcomprs.cpp
+	src/modules/common/ioapi.c
+	src/modules/common/unzip.c
 )
 SET(sword_zlib_nofound_SOURCES
 	src/utilfuns/zlib/adler32.c
@@ -352,6 +355,7 @@ SET(SWORD_INSTALL_HEADERS
 
 	include/roman.h
 	include/rtfhtml.h
+	include/rtfplain.h
 	include/sapphire.h
 	include/scsuutf8.h
 	include/strkey.h

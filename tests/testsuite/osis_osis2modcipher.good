@@ -1,15 +1,15 @@
-DEBUG(LINK MASTER): Gen.1.6
-DEBUG(LINK MASTER): Acts.2.21
+DEBUG(LINK MASTER)[112,78](Gen.1.6): 
+DEBUG(LINK MASTER)[201,41](Acts.2.21): 
 SUCCESS: ../../utilities/osis2mod: has finished its work and will now rest
-INFO(LINK): Linking Gen.1.7 to Gen.1.6
-INFO(LINK): Linking Gen.1.8 to Gen.1.6
-INFO(LINK): Linking Acts.2.22 to Acts.2.21
+INFO(LINK)[209,1](Gen.1.7): Linking to Gen.1.6
+INFO(LINK)[209,1](Gen.1.8): Linking to Gen.1.6
+INFO(LINK)[209,1](Acts.2.22): Linking to Acts.2.21
 Key:
 Psalms 3:1
 -------
 Preverse Header 0:
 Raw:
-<div sID="gen16" type="section"/> <title canonical="true" type="psalm">A Psalm of David<note n="A" osisID="Ps.3.xref.A" swordFootnote="1" type="crossReference"></note>, when he fled from Absalom his son.</title> <div sID="gen17" type="x-p"/> <lg sID="gen18"/> 
+<div sID="gen14" type="section"/> <title canonical="true" type="psalm">A Psalm of David<note n="A" osisID="Ps.3.xref.A" swordFootnote="1" type="crossReference"></note>, when he fled from Absalom his son.</title> <div sID="gen15" type="x-p"/> <lg sID="gen16"/> 
 -------
 Rendered Header:
  <h3 class="title psalm canonical">A Psalm of David<a class="noteMarker crossReference" href="passagestudy.jsp?action=showNote&type=x&value=1&module=OSISReference&passage=Psalms+3%3A1"><small><sup class="x">*x</sup></small></a>, when he fled from Absalom his son.</h3>
@@ -27,10 +27,19 @@ CSS:
 		.transChange.transChange-tenseChange { font-style: normal; }
 		.transChange:lang(zh) { font-style: normal; text-decoration: dotted underline; }
 		.overline { text-decoration: overline; }
-		.indent1 { margin-left: 1em; }
-		.indent2 { margin-left: 2em; }
-		.indent3 { margin-left: 3em; }
-		.indent4 { margin-left: 4em; }
+		/* poetry: each <l> is a block with a hanging indent, so a wrapped line
+		   is told apart from the next line; the verse number sits in the outdent */
+		.line { display: block; padding-left: 1.5em; text-indent: -1.5em; }
+		.line + br { display: none; }
+		.line.indent1 { padding-left: 2.5em; }
+		.line.indent2 { padding-left: 3.5em; }
+		.line.indent3 { padding-left: 4.5em; }
+		.line.indent4 { padding-left: 5.5em; }
+		.line.indent5 { padding-left: 6.5em; }
+		.indent1:not(.line) { margin-left: 1em; }
+		.indent2:not(.line) { margin-left: 2em; }
+		.indent3:not(.line) { margin-left: 3em; }
+		.indent4:not(.line) { margin-left: 4em; }
 		abbr { &:hover{ &:before{ content: attr(title); } } }
 		.small-caps { font-variant: small-caps; }
 		.otPassage { font-variant: small-caps; }
@@ -70,10 +79,19 @@ CSS:
 		.transChange.transChange-tenseChange { font-style: normal; }
 		.transChange:lang(zh) { font-style: normal; text-decoration: dotted underline; }
 		.overline { text-decoration: overline; }
-		.indent1 { margin-left: 1em; }
-		.indent2 { margin-left: 2em; }
-		.indent3 { margin-left: 3em; }
-		.indent4 { margin-left: 4em; }
+		/* poetry: each <l> is a block with a hanging indent, so a wrapped line
+		   is told apart from the next line; the verse number sits in the outdent */
+		.line { display: block; padding-left: 1.5em; text-indent: -1.5em; }
+		.line + br { display: none; }
+		.line.indent1 { padding-left: 2.5em; }
+		.line.indent2 { padding-left: 3.5em; }
+		.line.indent3 { padding-left: 4.5em; }
+		.line.indent4 { padding-left: 5.5em; }
+		.line.indent5 { padding-left: 6.5em; }
+		.indent1:not(.line) { margin-left: 1em; }
+		.indent2:not(.line) { margin-left: 2em; }
+		.indent3:not(.line) { margin-left: 3em; }
+		.indent4:not(.line) { margin-left: 4em; }
 		abbr { &:hover{ &:before{ content: attr(title); } } }
 		.small-caps { font-variant: small-caps; }
 		.otPassage { font-variant: small-caps; }
@@ -100,7 +118,7 @@ Mark 1:14
 -------
 Preverse Header 0:
 Raw:
-<div sID="gen30" type="section"/> <title>The Beginning of the Ministry of Jesus</title> <title type="parallel">(<reference osisRef="Matt.4.12-Matt.4.22">Matt 4:12–22</reference>; <reference osisRef="Luke.4.14">Luke 4:14</reference>, <reference osisRef="Luke.4.15">15</reference>; <reference osisRef="Luke.5.1-Luke.5.11">5:1-11</reference>) </title> <div sID="gen31" type="x-p"/> 
+<div sID="gen23" type="section"/> <title>The Beginning of the Ministry of Jesus</title> <title type="parallel">(<reference osisRef="Matt.4.12-Matt.4.22">Matt 4:12–22</reference>; <reference osisRef="Luke.4.14">Luke 4:14</reference>, <reference osisRef="Luke.4.15">15</reference>; <reference osisRef="Luke.5.1-Luke.5.11">5:1-11</reference>) </title> <div sID="gen24" type="x-p"/> 
 -------
 Rendered Header:
  <h3 class="title">The Beginning of the Ministry of Jesus</h3>
@@ -120,10 +138,19 @@ CSS:
 		.transChange.transChange-tenseChange { font-style: normal; }
 		.transChange:lang(zh) { font-style: normal; text-decoration: dotted underline; }
 		.overline { text-decoration: overline; }
-		.indent1 { margin-left: 1em; }
-		.indent2 { margin-left: 2em; }
-		.indent3 { margin-left: 3em; }
-		.indent4 { margin-left: 4em; }
+		/* poetry: each <l> is a block with a hanging indent, so a wrapped line
+		   is told apart from the next line; the verse number sits in the outdent */
+		.line { display: block; padding-left: 1.5em; text-indent: -1.5em; }
+		.line + br { display: none; }
+		.line.indent1 { padding-left: 2.5em; }
+		.line.indent2 { padding-left: 3.5em; }
+		.line.indent3 { padding-left: 4.5em; }
+		.line.indent4 { padding-left: 5.5em; }
+		.line.indent5 { padding-left: 6.5em; }
+		.indent1:not(.line) { margin-left: 1em; }
+		.indent2:not(.line) { margin-left: 2em; }
+		.indent3:not(.line) { margin-left: 3em; }
+		.indent4:not(.line) { margin-left: 4em; }
 		abbr { &:hover{ &:before{ content: attr(title); } } }
 		.small-caps { font-variant: small-caps; }
 		.otPassage { font-variant: small-caps; }
@@ -144,8 +171,8 @@ RenderText:
 
 Whitespace tests around headings:
 
+ <h1 class="testamentHeader">Old Testament</h1>
 
- <h1 class="bookHeader">Old Testament</h1>
 
  <h1 class="bookHeader main">THE FIRST BOOK OF MOSES CALLED GENESIS</h1>
 
@@ -168,8 +195,8 @@ Tables work like this: <table><tbody>
  </tbody></table>
 <br />
 
-  <h2 class="chapterHeader">From Creation to Abraham (1:1–11:9)</h2>
 
+ <h3 class="title">From Creation to Abraham (1:1–11:9)</h3>
 
  <h3 class="title">Creation of the Heavens and the Earth</h3>
 
